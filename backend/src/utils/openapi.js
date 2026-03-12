@@ -1,11 +1,9 @@
-const { ALLOWED_RURALIDAD, ALLOWED_SECTORS, ALLOWED_TIPOS } = require("../middlewares/validateHospitalQuery");
-
 const openapi = {
   openapi: "3.0.3",
   info: {
     title: "SERUMS Map Perú API",
     version: "0.1.0",
-    description: "Backend mock con archivos JSON para servir datos a un frontend con mapa y filtros.",
+    description: "Backend que expone establecimientos SERUMS cargados desde hospitales_filtrados.csv.",
   },
   servers: [{ url: "/api" }],
   paths: {
@@ -31,55 +29,23 @@ const openapi = {
         },
       },
     },
-    "/servicios": {
-      get: {
-        summary: "Listar servicios médicos",
-        responses: {
-          200: {
-            description: "Lista de servicios",
-            content: {
-              "application/json": {
-                schema: { type: "array", items: { type: "string" } },
-              },
-            },
-          },
-        },
-      },
-    },
     "/hospitales": {
       get: {
-        summary: "Obtener todos los hospitales (con filtros opcionales)",
+        summary: "Obtener todos los establecimientos (con filtros opcionales)",
         parameters: [
-          { name: "region", in: "query", schema: { type: "string" } },
           { name: "provincia", in: "query", schema: { type: "string" } },
           { name: "distrito", in: "query", schema: { type: "string" } },
-          {
-            name: "sector",
-            in: "query",
-            description: "Uno o más sectores separados por coma",
-            schema: { type: "string", example: "MINSA,ESSALUD" },
-          },
-          {
-            name: "tipo",
-            in: "query",
-            description: "Uno o más tipos separados por coma",
-            schema: { type: "string", example: "I-1,I-2" },
-          },
-          {
-            name: "ruralidad",
-            in: "query",
-            schema: { type: "string", enum: Array.from(ALLOWED_RURALIDAD) },
-          },
-          {
-            name: "servicio",
-            in: "query",
-            description: "Uno o más servicios separados por coma (AND)",
-            schema: { type: "string", example: "Farmacia,Laboratorio" },
-          },
+          { name: "profesion", in: "query", schema: { type: "string" } },
+          { name: "institucion", in: "query", schema: { type: "string" } },
+          { name: "departamento", in: "query", schema: { type: "string" } },
+          { name: "grado_dificultad", in: "query", schema: { type: "string" } },
+          { name: "categoria", in: "query", schema: { type: "string" } },
+          { name: "zaf", in: "query", schema: { type: "string", example: "SI" } },
+          { name: "ze", in: "query", schema: { type: "string", example: "NO" } },
         ],
         responses: {
           200: {
-            description: "Lista de hospitales",
+            description: "Lista de establecimientos",
             content: {
               "application/json": {
                 schema: { type: "array", items: { $ref: "#/components/schemas/Hospital" } },
@@ -105,40 +71,101 @@ const openapi = {
         },
       },
     },
+    "/ruta": {
+      get: {
+        summary: "Calcular ruta (OSRM) desde usuario al hospital",
+        parameters: [
+          { name: "latUsuario", in: "query", required: true, schema: { type: "number" } },
+          { name: "lonUsuario", in: "query", required: true, schema: { type: "number" } },
+          { name: "latHospital", in: "query", required: true, schema: { type: "number" } },
+          { name: "lonHospital", in: "query", required: true, schema: { type: "number" } },
+        ],
+        responses: {
+          200: {
+            description: "Ruta OSRM",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/RouteResponse" },
+              },
+            },
+          },
+          400: { $ref: "#/components/responses/BadRequest" },
+        },
+      },
+    },
+    "/lugares-cercanos/{id}": {
+      get: {
+        summary: "Obtener lugares cercanos (Overpass) alrededor de un hospital",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          200: {
+            description: "Lugares cercanos agrupados",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/NearbyPlacesResponse" } },
+            },
+          },
+          404: { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/buscar": {
+      get: {
+        summary: "Búsqueda global (Nominatim)",
+        parameters: [{ name: "q", in: "query", required: true, schema: { type: "string" } }],
+        responses: {
+          200: {
+            description: "Resultados de Nominatim",
+            content: {
+              "application/json": {
+                schema: { type: "array", items: { $ref: "#/components/schemas/NominatimResult" } },
+              },
+            },
+          },
+          400: { $ref: "#/components/responses/BadRequest" },
+        },
+      },
+    },
   },
   components: {
     schemas: {
       Hospital: {
         type: "object",
         properties: {
-          id: { type: "string", example: "h-001" },
-          nombre: { type: "string" },
-          sector: { type: "string", enum: Array.from(ALLOWED_SECTORS) },
-          tipo: { type: "string", enum: Array.from(ALLOWED_TIPOS) },
-          region: { type: "string" },
+          id: { type: "string", example: "00005070" },
+          profesion: { type: "string" },
+          institucion: { type: "string" },
+          departamento: { type: "string" },
           provincia: { type: "string" },
           distrito: { type: "string" },
-          lat: { type: "number", format: "float" },
-          lng: { type: "number", format: "float" },
-          servicios: { type: "array", items: { type: "string" } },
-          nivel_ruralidad: { type: "string", enum: Array.from(ALLOWED_RURALIDAD) },
-          direccion: { type: "string" },
-          foto: { type: "string" },
+          grado_dificultad: { type: "string", example: "GD-5" },
+          codigo_renipress_modular: { type: "string", example: "00005070" },
+          nombre_establecimiento: { type: "string" },
+          presupuesto: { type: "string" },
+          categoria: { type: "string" },
+          zaf: { type: "string", example: "SI" },
+          ze: { type: "string", example: "NO" },
+          lat: { type: "number", format: "float", example: -6.2317 },
+          lng: { type: "number", format: "float", example: -77.869 },
+          imagenes: { type: "array", items: { type: "string", format: "uri" } },
+          coordenadas_fuente: { type: "string", example: "RENIPRESS" },
+          profesiones: { type: "array", items: { type: "string" } },
         },
         required: [
           "id",
-          "nombre",
-          "sector",
-          "tipo",
-          "region",
+          "profesion",
+          "institucion",
+          "departamento",
           "provincia",
           "distrito",
+          "grado_dificultad",
+          "codigo_renipress_modular",
+          "nombre_establecimiento",
+          "presupuesto",
+          "categoria",
+          "zaf",
+          "ze",
           "lat",
           "lng",
-          "servicios",
-          "nivel_ruralidad",
-          "direccion",
-          "foto",
         ],
       },
       ErrorResponse: {
@@ -155,6 +182,52 @@ const openapi = {
           },
         },
         required: ["error"],
+      },
+      RouteResponse: {
+        type: "object",
+        properties: {
+          distancia: { type: "number", example: 12345.6 },
+          duracion: { type: "number", example: 2345.6 },
+          geometria: { type: "object" },
+        },
+        required: ["distancia", "duracion", "geometria"],
+      },
+      NearbyPlace: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          lat: { type: "number" },
+          lon: { type: "number" },
+          name: { type: "string" },
+          tags: { type: "object" },
+        },
+        required: ["id", "lat", "lon", "name", "tags"],
+      },
+      NearbyPlacesResponse: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          hospedajes: { type: "array", items: { $ref: "#/components/schemas/NearbyPlace" } },
+          restaurantes: { type: "array", items: { $ref: "#/components/schemas/NearbyPlace" } },
+          farmacias: { type: "array", items: { $ref: "#/components/schemas/NearbyPlace" } },
+          tiendas: { type: "array", items: { $ref: "#/components/schemas/NearbyPlace" } },
+          comisarias: { type: "array", items: { $ref: "#/components/schemas/NearbyPlace" } },
+        },
+        required: ["id", "hospedajes", "restaurantes", "farmacias", "tiendas", "comisarias"],
+      },
+      NominatimResult: {
+        type: "object",
+        properties: {
+          place_id: { type: "number" },
+          display_name: { type: "string" },
+          lat: { type: "string" },
+          lon: { type: "string" },
+          type: { type: "string" },
+          class: { type: "string" },
+          importance: { type: "number" },
+          boundingbox: { type: "array", items: { type: "string" } },
+        },
+        required: ["place_id", "display_name", "lat", "lon"],
       },
     },
     responses: {

@@ -10,7 +10,7 @@
     "region": "Lima",
     "province": "Lima",
     "district": "Cercado de Lima",
-    "services": ["Emergencias", "Laboratorio", "Rayos X", "Farmacia", "UCI"],
+    "careers": ["MEDICINA", "ENFERMERIA", "OBSTETRICIA", "QUIMICO FARMACEUTICO", "TM - LABORATORIO CLINICO", "TM - RADIOLOGIA"],
     "rurality": "Bajo",
     "photoUrl": ""
   },
@@ -25,7 +25,7 @@
     "region": "Lima",
     "province": "Lima",
     "district": "Jesús María",
-    "services": ["Emergencias", "Laboratorio", "Farmacia", "UCI", "Imagenología"],
+    "careers": ["MEDICINA", "ENFERMERIA", "NUTRICION", "PSICOLOGIA", "TRABAJO SOCIAL", "ODONTOLOGIA"],
     "rurality": "Bajo",
     "photoUrl": ""
   },
@@ -40,7 +40,7 @@
     "region": "Lima",
     "province": "Lima",
     "district": "Jesús María",
-    "services": ["Emergencias", "Laboratorio", "Rayos X", "Farmacia"],
+    "careers": ["MEDICINA", "ENFERMERIA", "TM - RADIOLOGIA", "TM - TERAPIA FISICA"],
     "rurality": "Bajo",
     "photoUrl": ""
   },
@@ -55,7 +55,7 @@
     "region": "Lima",
     "province": "Lima",
     "district": "San Isidro",
-    "services": ["Consulta Externa", "Laboratorio", "Farmacia", "Imagenología"],
+    "careers": ["ODONTOLOGIA", "PSICOLOGIA", "NUTRICION", "QUIMICO FARMACEUTICO"],
     "rurality": "Bajo",
     "photoUrl": ""
   },
@@ -70,7 +70,7 @@
     "region": "Cusco",
     "province": "Cusco",
     "district": "Wanchaq",
-    "services": ["Emergencias", "Laboratorio", "Rayos X", "Maternidad", "Farmacia"],
+    "careers": ["MEDICINA", "ENFERMERIA", "OBSTETRICIA", "TM - LABORATORIO CLINICO", "TRABAJO SOCIAL"],
     "rurality": "Medio",
     "photoUrl": ""
   },
@@ -85,7 +85,7 @@
     "region": "Arequipa",
     "province": "Arequipa",
     "district": "Cercado",
-    "services": ["Emergencias", "Laboratorio", "Farmacia", "Rayos X"],
+    "careers": ["MEDICINA", "ENFERMERIA", "TM - RADIOLOGIA", "TM - TERAPIA FISICA", "QUIMICO FARMACEUTICO"],
     "rurality": "Bajo",
     "photoUrl": ""
   },
@@ -100,7 +100,7 @@
     "region": "Lima",
     "province": "Lima",
     "district": "San Juan de Lurigancho",
-    "services": ["Consulta Externa", "Farmacia", "Vacunación"],
+    "careers": ["ENFERMERIA", "OBSTETRICIA", "NUTRICION", "TRABAJO SOCIAL"],
     "rurality": "Bajo",
     "photoUrl": ""
   },
@@ -115,7 +115,7 @@
     "region": "Huancavelica",
     "province": "Huancavelica",
     "district": "Huancavelica",
-    "services": ["Consulta Externa", "Vacunación", "Telemedicina"],
+    "careers": ["ENFERMERIA", "OBSTETRICIA", "TM - TERAPIA LENGUAJE", "TRABAJO SOCIAL"],
     "rurality": "Alto",
     "photoUrl": ""
   },
@@ -130,7 +130,7 @@
     "region": "Piura",
     "province": "Piura",
     "district": "Piura",
-    "services": ["Emergencias", "Laboratorio", "Rayos X", "Farmacia", "Maternidad"],
+    "careers": ["MEDICINA", "ENFERMERIA", "OBSTETRICIA", "TM - LABORATORIO CLINICO", "TM - RADIOLOGIA", "PSICOLOGIA"],
     "rurality": "Medio",
     "photoUrl": ""
   },
@@ -145,7 +145,7 @@
     "region": "Piura",
     "province": "Piura",
     "district": "Piura",
-    "services": ["Emergencias", "Laboratorio", "Farmacia", "Imagenología"],
+    "careers": ["MEDICINA", "ENFERMERIA", "QUIMICO FARMACEUTICO", "TM - LABORATORIO CLINICO"],
     "rurality": "Medio",
     "photoUrl": ""
   },
@@ -160,7 +160,7 @@
     "region": "Puno",
     "province": "Puno",
     "district": "Puno",
-    "services": ["Consulta Externa", "Farmacia", "Laboratorio"],
+    "careers": ["BIOLOGIA", "ENFERMERIA", "NUTRICION", "TRABAJO SOCIAL"],
     "rurality": "Alto",
     "photoUrl": ""
   },
@@ -175,7 +175,7 @@
     "region": "Ayacucho",
     "province": "Huamanga",
     "district": "Ayacucho",
-    "services": ["Consulta Externa", "Vacunación"],
+    "careers": ["ENFERMERIA", "OBSTETRICIA", "INGENIERIA SANITARIA", "TRABAJO SOCIAL"],
     "rurality": "Alto",
     "photoUrl": ""
   },
@@ -190,7 +190,7 @@
     "region": "Loreto",
     "province": "Maynas",
     "district": "Iquitos",
-    "services": ["Emergencias", "Laboratorio", "Farmacia", "Maternidad"],
+    "careers": ["MEDICINA", "ENFERMERIA", "TM - LABORATORIO CLINICO", "QUIMICO FARMACEUTICO", "PSICOLOGIA"],
     "rurality": "Medio",
     "photoUrl": ""
   },
@@ -205,7 +205,7 @@
     "region": "San Martín",
     "province": "San Martín",
     "district": "Tarapoto",
-    "services": ["Consulta Externa", "Laboratorio", "Farmacia", "Telemedicina"],
+    "careers": ["ENFERMERIA", "NUTRICION", "TM - LABORATORIO CLINICO", "QUIMICO FARMACEUTICO"],
     "rurality": "Medio",
     "photoUrl": ""
   },
@@ -220,7 +220,7 @@
     "region": "La Libertad",
     "province": "Trujillo",
     "district": "Trujillo",
-    "services": ["Consulta Externa", "Farmacia", "Imagenología"],
+    "careers": ["ODONTOLOGIA", "PSICOLOGIA", "NUTRICION", "TM - TERAPIA FISICA"],
     "rurality": "Bajo",
     "photoUrl": ""
   },
@@ -235,7 +235,7 @@
     "region": "La Libertad",
     "province": "Trujillo",
     "district": "Trujillo",
-    "services": ["Emergencias", "Laboratorio", "Rayos X", "Farmacia", "Maternidad"],
+    "careers": ["MEDICINA", "ENFERMERIA", "OBSTETRICIA", "TM - RADIOLOGIA", "TM - TERAPIA FISICA", "TRABAJO SOCIAL"],
     "rurality": "Bajo",
     "photoUrl": ""
   },
@@ -250,7 +250,7 @@
     "region": "Ica",
     "province": "Chincha",
     "district": "Chincha Alta",
-    "services": ["Consulta Externa", "Laboratorio", "Farmacia", "Vacunación"],
+    "careers": ["ENFERMERIA", "OBSTETRICIA", "NUTRICION", "TM - LABORATORIO CLINICO"],
     "rurality": "Medio",
     "photoUrl": ""
   },
@@ -265,7 +265,7 @@
     "region": "Amazonas",
     "province": "Chachapoyas",
     "district": "Chachapoyas",
-    "services": ["Consulta Externa", "Vacunación", "Telemedicina"],
+    "careers": ["MEDICINA VETERINARIA", "BIOLOGIA", "ENFERMERIA", "INGENIERIA SANITARIA"],
     "rurality": "Alto",
     "photoUrl": ""
   }

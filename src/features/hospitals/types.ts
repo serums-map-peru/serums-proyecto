@@ -1,32 +1,69 @@
-export type HospitalSector = "MINSA" | "ESSALUD" | "Militar" | "Privado";
-
-export type EstablishmentType = "I-1" | "I-2" | "I-3" | "I-4";
-
-export type RuralityLevel = "Alto" | "Medio" | "Bajo";
-
 export type Hospital = {
   id: string;
-  name: string;
+  profesion: string;
+  profesiones?: string[];
+  institucion: string;
+  departamento: string;
+  provincia: string;
+  distrito: string;
+  grado_dificultad: string;
+  codigo_renipress_modular: string;
+  nombre_establecimiento: string;
+  presupuesto: string;
+  categoria: string;
+  zaf: string;
+  ze: string;
   lat: number;
   lng: number;
-  sector: HospitalSector;
-  establishmentType: EstablishmentType;
-  address: string;
-  region: string;
-  province: string;
-  district: string;
-  services: string[];
-  rurality: RuralityLevel;
-  photoUrl?: string;
+  imagenes?: string[];
+  coordenadas_fuente?: string;
 };
 
 export type HospitalFilters = {
-  query: string;
-  region: string | null;
-  province: string | null;
-  district: string | null;
-  sectors: HospitalSector[];
-  establishmentTypes: EstablishmentType[];
-  rurality: RuralityLevel | null;
-  services: string[];
+  profesion: string | null;
+  institucion: string | null;
+  departamento: string | null;
+  provincia: string | null;
+  distrito: string | null;
+  grado_dificultad: string | null;
+  categoria: string | null;
+  zaf: string | null;
+  ze: string | null;
+};
+
+export type RouteResponse = {
+  distancia: number;
+  duracion: number;
+  geometria: {
+    type: "LineString";
+    coordinates: Array<[number, number]>;
+  };
+};
+
+export type NearbyPlace = {
+  id: string;
+  lat: number;
+  lon: number;
+  name: string;
+  tags: Record<string, unknown>;
+};
+
+export type NearbyPlacesResponse = {
+  id: string;
+  hospedajes: NearbyPlace[];
+  restaurantes: NearbyPlace[];
+  farmacias: NearbyPlace[];
+  tiendas: NearbyPlace[];
+  comisarias: NearbyPlace[];
+};
+
+export type NominatimResult = {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+  type?: string;
+  class?: string;
+  importance?: number;
+  boundingbox?: string[];
 };

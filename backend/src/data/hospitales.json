@@ -9,7 +9,7 @@
     "distrito": "Cercado de Lima",
     "lat": -12.0579,
     "lng": -77.0236,
-    "servicios": ["Emergencias", "Laboratorio", "Rayos X", "Farmacia", "UCI"],
+    "carreras": ["MEDICINA", "ENFERMERIA", "OBSTETRICIA", "TM - LABORATORIO CLINICO", "TM - RADIOLOGIA", "QUIMICO FARMACEUTICO"],
     "nivel_ruralidad": "Bajo",
     "direccion": "Av. Grau 13, Cercado de Lima",
     "foto": ""
@@ -24,7 +24,7 @@
     "distrito": "Jesús María",
     "lat": -12.0801,
     "lng": -77.0496,
-    "servicios": ["Emergencias", "Laboratorio", "Farmacia", "UCI", "Imagenología"],
+    "carreras": ["MEDICINA", "ENFERMERIA", "NUTRICION", "PSICOLOGIA", "TRABAJO SOCIAL"],
     "nivel_ruralidad": "Bajo",
     "direccion": "Av. Rebagliati 490, Jesús María",
     "foto": ""
@@ -39,7 +39,7 @@
     "distrito": "Jesús María",
     "lat": -12.1014,
     "lng": -77.0178,
-    "servicios": ["Emergencias", "Laboratorio", "Rayos X", "Farmacia"],
+    "carreras": ["MEDICINA", "ENFERMERIA", "TM - RADIOLOGIA", "TM - TERAPIA FISICA"],
     "nivel_ruralidad": "Bajo",
     "direccion": "Av. Brasil 360, Jesús María",
     "foto": ""
@@ -54,7 +54,7 @@
     "distrito": "San Isidro",
     "lat": -12.1219,
     "lng": -77.0307,
-    "servicios": ["Consulta Externa", "Laboratorio", "Farmacia", "Imagenología"],
+    "carreras": ["ODONTOLOGIA", "PSICOLOGIA", "NUTRICION", "QUIMICO FARMACEUTICO"],
     "nivel_ruralidad": "Bajo",
     "direccion": "Av. Pardo y Aliaga 640, San Isidro",
     "foto": ""
@@ -69,7 +69,7 @@
     "distrito": "Wanchaq",
     "lat": -13.5252,
     "lng": -71.9675,
-    "servicios": ["Emergencias", "Laboratorio", "Rayos X", "Maternidad", "Farmacia"],
+    "carreras": ["MEDICINA", "ENFERMERIA", "OBSTETRICIA", "TM - LABORATORIO CLINICO", "TRABAJO SOCIAL"],
     "nivel_ruralidad": "Medio",
     "direccion": "Av. de la Cultura s/n, Cusco",
     "foto": ""
@@ -84,7 +84,7 @@
     "distrito": "Cercado",
     "lat": -16.3989,
     "lng": -71.535,
-    "servicios": ["Emergencias", "Laboratorio", "Farmacia", "Rayos X"],
+    "carreras": ["MEDICINA", "ENFERMERIA", "TM - RADIOLOGIA", "TM - TERAPIA FISICA", "QUIMICO FARMACEUTICO"],
     "nivel_ruralidad": "Bajo",
     "direccion": "Av. Periférica s/n, Arequipa",
     "foto": ""
@@ -99,7 +99,7 @@
     "distrito": "San Juan de Lurigancho",
     "lat": -12.0077,
     "lng": -77.0068,
-    "servicios": ["Consulta Externa", "Farmacia", "Vacunación"],
+    "carreras": ["ENFERMERIA", "OBSTETRICIA", "NUTRICION", "TRABAJO SOCIAL"],
     "nivel_ruralidad": "Bajo",
     "direccion": "Av. Próceres de la Independencia, SJL",
     "foto": ""
@@ -114,7 +114,7 @@
     "distrito": "Huancavelica",
     "lat": -12.785,
     "lng": -74.9722,
-    "servicios": ["Consulta Externa", "Vacunación", "Telemedicina"],
+    "carreras": ["ENFERMERIA", "OBSTETRICIA", "TM - TERAPIA LENGUAJE", "INGENIERIA SANITARIA", "MEDICINA VETERINARIA"],
     "nivel_ruralidad": "Alto",
     "direccion": "Jr. Independencia, Huancavelica",
     "foto": ""
@@ -129,7 +129,7 @@
     "distrito": "Piura",
     "lat": -5.1945,
     "lng": -80.6328,
-    "servicios": ["Emergencias", "Laboratorio", "Rayos X", "Farmacia", "Maternidad"],
+    "carreras": ["MEDICINA", "ENFERMERIA", "OBSTETRICIA", "TM - LABORATORIO CLINICO", "TM - RADIOLOGIA", "PSICOLOGIA"],
     "nivel_ruralidad": "Medio",
     "direccion": "Av. Grau s/n, Piura",
     "foto": ""
@@ -144,7 +144,7 @@
     "distrito": "Tarapoto",
     "lat": -6.4825,
     "lng": -76.3733,
-    "servicios": ["Consulta Externa", "Laboratorio", "Farmacia", "Telemedicina"],
+    "carreras": ["ENFERMERIA", "NUTRICION", "TM - LABORATORIO CLINICO", "QUIMICO FARMACEUTICO", "BIOLOGIA"],
     "nivel_ruralidad": "Medio",
     "direccion": "Jr. San Martín 220, Tarapoto",
     "foto": ""

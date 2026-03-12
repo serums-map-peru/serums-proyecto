@@ -2,13 +2,17 @@
 
 import * as React from "react";
 
-import { cn } from "@/shared/lib/cn";
 import { IconButton } from "@/shared/ui/IconButton";
+import { cn } from "@/shared/lib/cn";
+import { NominatimResult } from "@/features/hospitals/types";
 
 export type AppHeaderProps = {
-  query: string;
-  onQueryChange: (value: string) => void;
   onOpenFilters: () => void;
+  searchValue: string;
+  searchLoading: boolean;
+  searchResults: NominatimResult[];
+  onSearchChange: (value: string) => void;
+  onSelectSearchResult: (item: NominatimResult) => void;
 };
 
 function UserIcon() {
@@ -42,61 +46,127 @@ function FilterIcon() {
   );
 }
 
-export function AppHeader({ query, onQueryChange, onOpenFilters }: AppHeaderProps) {
+export function AppHeader({
+  onOpenFilters,
+  searchValue,
+  searchLoading,
+  searchResults,
+  onSearchChange,
+  onSelectSearchResult,
+}: AppHeaderProps) {
+  const [open, setOpen] = React.useState(false);
+
   return (
     <header className="border-b border-[var(--border)] bg-white shadow-sm">
-      <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-3">
+      <div className="mx-auto max-w-[1400px] px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-[var(--medical-blue)]">
-            <span className="text-lg font-black">S</span>
-          </div>
-          <div className="leading-tight">
-            <div className="text-base font-extrabold text-slate-900">SERUMS Map Perú</div>
-            <div className="text-xs font-medium text-slate-500">Mapa de establecimientos</div>
-          </div>
-        </div>
-
-        <div className="flex flex-1 items-center justify-center">
-          <div className="relative w-full max-w-xl">
-            <input
-              value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
-              placeholder="Buscar hospital por nombre…"
-              className={cn(
-                "h-10 w-full rounded-2xl border border-[var(--border)] bg-white px-4 pr-10 text-sm outline-none shadow-sm",
-                "focus:ring-2 focus:ring-[var(--medical-blue)]",
-              )}
-            />
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
-                <path
-                  d="M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  d="m21 21-4.35-4.35"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-[var(--medical-blue)]">
+              <span className="text-lg font-black">S</span>
+            </div>
+            <div className="leading-tight">
+              <div className="text-base font-extrabold text-slate-900">SERUMS Map Perú</div>
+              <div className="text-xs font-medium text-slate-500">Mapa de establecimientos</div>
             </div>
           </div>
+
+          <div className="relative mx-auto hidden w-full max-w-[560px] sm:block">
+            <input
+              value={searchValue}
+              onChange={(e) => {
+                onSearchChange(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onBlur={() => setTimeout(() => setOpen(false), 120)}
+              placeholder="Buscar lugar (Nominatim)…"
+              className="h-10 w-full rounded-2xl border border-[var(--border)] bg-white px-4 text-sm font-semibold text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+            />
+
+            <div
+              className={cn(
+                "absolute left-0 right-0 top-[calc(100%+8px)] z-[3500] overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_14px_40px_rgba(15,23,42,0.12)]",
+                open && (searchLoading || searchResults.length > 0) ? "block" : "hidden",
+              )}
+            >
+              {searchLoading ? (
+                <div className="px-4 py-3 text-sm font-semibold text-slate-600">Buscando…</div>
+              ) : (
+                <div className="max-h-[340px] overflow-auto">
+                  {searchResults.map((r) => (
+                    <button
+                      key={r.place_id}
+                      type="button"
+                      className="w-full px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        onSelectSearchResult(r);
+                        setOpen(false);
+                      }}
+                    >
+                      <div className="line-clamp-2">{r.display_name}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <IconButton
+              className="sm:hidden"
+              onClick={onOpenFilters}
+              aria-label="Abrir filtros"
+            >
+              <FilterIcon />
+            </IconButton>
+
+            <IconButton aria-label="Usuario">
+              <UserIcon />
+            </IconButton>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <IconButton
-            className="sm:hidden"
-            onClick={onOpenFilters}
-            aria-label="Abrir filtros"
-          >
-            <FilterIcon />
-          </IconButton>
+        <div className="relative mt-3 sm:hidden">
+          <input
+            value={searchValue}
+            onChange={(e) => {
+              onSearchChange(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 120)}
+            placeholder="Buscar lugar (Nominatim)…"
+            className="h-10 w-full rounded-2xl border border-[var(--border)] bg-white px-4 text-sm font-semibold text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+          />
 
-          <IconButton aria-label="Usuario">
-            <UserIcon />
-          </IconButton>
+          <div
+            className={cn(
+              "absolute left-0 right-0 top-[calc(100%+8px)] z-[3500] overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_14px_40px_rgba(15,23,42,0.12)]",
+              open && (searchLoading || searchResults.length > 0) ? "block" : "hidden",
+            )}
+          >
+            {searchLoading ? (
+              <div className="px-4 py-3 text-sm font-semibold text-slate-600">Buscando…</div>
+            ) : (
+              <div className="max-h-[320px] overflow-auto">
+                {searchResults.map((r) => (
+                  <button
+                    key={r.place_id}
+                    type="button"
+                    className="w-full px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onSelectSearchResult(r);
+                      setOpen(false);
+                    }}
+                  >
+                    <div className="line-clamp-2">{r.display_name}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

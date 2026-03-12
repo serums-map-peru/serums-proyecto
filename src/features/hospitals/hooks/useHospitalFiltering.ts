@@ -10,109 +10,174 @@ function uniqueSorted(values: string[]) {
 
 export function createInitialHospitalFilters(): HospitalFilters {
   return {
-    query: "",
-    region: null,
-    province: null,
-    district: null,
-    sectors: [],
-    establishmentTypes: [],
-    rurality: null,
-    services: [],
+    profesion: null,
+    institucion: null,
+    departamento: null,
+    provincia: null,
+    distrito: null,
+    grado_dificultad: null,
+    categoria: null,
+    zaf: null,
+    ze: null,
   };
 }
 
-export function filterHospitals(hospitals: Hospital[], filters: HospitalFilters) {
-  const q = filters.query.trim().toLowerCase();
-
-  return hospitals.filter((h) => {
-    if (q && !h.name.toLowerCase().includes(q)) return false;
-    if (filters.region && h.region !== filters.region) return false;
-    if (filters.province && h.province !== filters.province) return false;
-    if (filters.district && h.district !== filters.district) return false;
-    if (filters.rurality && h.rurality !== filters.rurality) return false;
-
-    if (filters.sectors.length && !filters.sectors.includes(h.sector)) return false;
-    if (
-      filters.establishmentTypes.length &&
-      !filters.establishmentTypes.includes(h.establishmentType)
-    )
-      return false;
-    if (
-      filters.services.length &&
-      !filters.services.every((s) => h.services.includes(s))
-    )
-      return false;
-
-    return true;
-  });
+function getApiBaseUrl() {
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (configured && configured.trim().length > 0) return configured.trim().replace(/\/$/, "");
+  return "http://localhost:4000/api";
 }
 
-export function useHospitalFiltering(hospitals: Hospital[]) {
-  const [filters, setFilters] = React.useState<HospitalFilters>(
-    createInitialHospitalFilters(),
-  );
+function buildHospitalQuery(filters: HospitalFilters) {
+  const params = new URLSearchParams();
 
-  const regionOptions = React.useMemo(
-    () => uniqueSorted(hospitals.map((h) => h.region)),
-    [hospitals],
-  );
+  const entries: Array<[keyof HospitalFilters, string]> = [
+    ["profesion", filters.profesion ?? ""],
+    ["institucion", filters.institucion ?? ""],
+    ["departamento", filters.departamento ?? ""],
+    ["provincia", filters.provincia ?? ""],
+    ["distrito", filters.distrito ?? ""],
+    ["grado_dificultad", filters.grado_dificultad ?? ""],
+    ["categoria", filters.categoria ?? ""],
+    ["zaf", filters.zaf ?? ""],
+    ["ze", filters.ze ?? ""],
+  ];
 
-  const provinceOptions = React.useMemo(() => {
-    const base = filters.region
-      ? hospitals.filter((h) => h.region === filters.region)
-      : hospitals;
-    return uniqueSorted(base.map((h) => h.province));
-  }, [filters.region, hospitals]);
+  for (const [k, v] of entries) {
+    const value = v.trim();
+    if (value.length > 0) params.set(String(k), value);
+  }
 
-  const districtOptions = React.useMemo(() => {
-    let base = hospitals;
-    if (filters.region) base = base.filter((h) => h.region === filters.region);
-    if (filters.province)
-      base = base.filter((h) => h.province === filters.province);
-    return uniqueSorted(base.map((h) => h.district));
-  }, [filters.region, filters.province, hospitals]);
+  const qs = params.toString();
+  return qs.length > 0 ? `?${qs}` : "";
+}
 
-  const serviceOptions = React.useMemo(
-    () => uniqueSorted(hospitals.flatMap((h) => h.services)),
-    [hospitals],
-  );
+type Options = {
+  profesiones: string[];
+  instituciones: string[];
+  departamentos: string[];
+  provincias: string[];
+  distritos: string[];
+  grados_dificultad: string[];
+  categorias: string[];
+  zaf: string[];
+  ze: string[];
+};
 
-  const filteredHospitals = React.useMemo(
-    () => filterHospitals(hospitals, filters),
-    [hospitals, filters],
-  );
+export function useHospitalFiltering() {
+  const [filters, setFilters] = React.useState<HospitalFilters>(createInitialHospitalFilters());
+  const [hospitals, setHospitals] = React.useState<Hospital[]>([]);
+  const [allHospitals, setAllHospitals] = React.useState<Hospital[] | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const apiBase = React.useMemo(() => getApiBaseUrl(), []);
 
   React.useEffect(() => {
-    setFilters((prev) => {
-      let changed = false;
-      const next: HospitalFilters = { ...prev };
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
 
-      if (next.region && !regionOptions.includes(next.region)) {
-        next.region = null;
-        changed = true;
-      }
-      if (next.province && !provinceOptions.includes(next.province)) {
-        next.province = null;
-        changed = true;
-      }
-      if (next.district && !districtOptions.includes(next.district)) {
-        next.district = null;
-        changed = true;
-      }
+    fetch(`${apiBase}/hospitales`, { signal: controller.signal })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          const message =
+            body && typeof body === "object" && body.error && body.error.message
+              ? String(body.error.message)
+              : "Error al cargar establecimientos";
+          throw new Error(message);
+        }
+        return r.json() as Promise<Hospital[]>;
+      })
+      .then((data) => {
+        setAllHospitals(data);
+        setHospitals(data);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (e && e.name === "AbortError") return;
+        setError(e instanceof Error ? e.message : "Error al cargar establecimientos");
+        setLoading(false);
+      });
 
-      return changed ? next : prev;
-    });
-  }, [regionOptions, provinceOptions, districtOptions]);
+    return () => controller.abort();
+  }, [apiBase]);
+
+  React.useEffect(() => {
+    if (!allHospitals) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    const qs = buildHospitalQuery(filters);
+    fetch(`${apiBase}/hospitales${qs}`, { signal: controller.signal })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          const message =
+            body && typeof body === "object" && body.error && body.error.message
+              ? String(body.error.message)
+              : "Error al filtrar establecimientos";
+          throw new Error(message);
+        }
+        return r.json() as Promise<Hospital[]>;
+      })
+      .then((data) => {
+        setHospitals(data);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (e && e.name === "AbortError") return;
+        setError(e instanceof Error ? e.message : "Error al filtrar establecimientos");
+        setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [apiBase, allHospitals, filters]);
+
+  const options: Options = React.useMemo(() => {
+    const base = allHospitals ?? hospitals;
+    const allProfessions: string[] = [];
+    for (const h of base) {
+      const profs = Array.isArray(h.profesiones) && h.profesiones.length > 0 ? h.profesiones : [h.profesion];
+      for (const p of profs) {
+        if (p) allProfessions.push(p);
+      }
+    }
+    return {
+      profesiones: uniqueSorted(allProfessions),
+      instituciones: uniqueSorted(base.map((h) => h.institucion).filter(Boolean)),
+      departamentos: uniqueSorted(base.map((h) => h.departamento).filter(Boolean)),
+      provincias: uniqueSorted(base.map((h) => h.provincia).filter(Boolean)),
+      distritos: uniqueSorted(base.map((h) => h.distrito).filter(Boolean)),
+      grados_dificultad: uniqueSorted(base.map((h) => h.grado_dificultad).filter(Boolean)),
+      categorias: uniqueSorted(base.map((h) => h.categoria).filter(Boolean)),
+      zaf: uniqueSorted(base.map((h) => h.zaf).filter(Boolean)),
+      ze: uniqueSorted(base.map((h) => h.ze).filter(Boolean)),
+    };
+  }, [allHospitals, hospitals]);
+
+  async function fetchHospitalById(id: string) {
+    const r = await fetch(`${apiBase}/hospitales/${encodeURIComponent(id)}`);
+    if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      const message =
+        body && typeof body === "object" && body.error && body.error.message
+          ? String(body.error.message)
+          : "Error al obtener el establecimiento";
+      throw new Error(message);
+    }
+    return (await r.json()) as Hospital;
+  }
 
   return {
     filters,
     setFilters,
-    filteredHospitals,
-    options: {
-      regions: regionOptions,
-      provinces: provinceOptions,
-      districts: districtOptions,
-      services: serviceOptions,
-    },
+    filteredHospitals: hospitals,
+    options,
+    loading,
+    error,
+    fetchHospitalById,
   };
 }

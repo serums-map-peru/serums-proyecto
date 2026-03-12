@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 
 import { Hospital } from "@/features/hospitals/types";
 import { cn } from "@/shared/lib/cn";
@@ -9,8 +10,16 @@ import { Card } from "@/shared/ui/Card";
 
 export type HospitalDetailPanelProps = {
   hospital: Hospital | null;
+  loading?: boolean;
+  error?: string | null;
   open: boolean;
   onClose: () => void;
+  routeLoading?: boolean;
+  routeError?: string | null;
+  nearbyLoading?: boolean;
+  nearbyError?: string | null;
+  onRequestRoute?: () => void;
+  onRequestNearby?: () => void;
 };
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -22,28 +31,26 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function Badge({
-  children,
-  tone = "blue",
-}: {
-  children: React.ReactNode;
-  tone?: "blue" | "green" | "gray";
-}) {
-  const toneClass =
-    tone === "green"
-      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-      : tone === "gray"
-        ? "bg-slate-50 text-slate-700 border-slate-200"
-        : "bg-blue-50 text-blue-800 border-blue-200";
+export function HospitalDetailPanel({
+  hospital,
+  loading = false,
+  error = null,
+  open,
+  onClose,
+  routeLoading = false,
+  routeError = null,
+  nearbyLoading = false,
+  nearbyError = null,
+  onRequestRoute,
+  onRequestNearby,
+}: HospitalDetailPanelProps) {
+  const imageUrl = hospital && hospital.imagenes && hospital.imagenes.length > 0 ? hospital.imagenes[0] : null;
+  const [imageOk, setImageOk] = React.useState(true);
 
-  return (
-    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold", toneClass)}>
-      {children}
-    </span>
-  );
-}
+  React.useEffect(() => {
+    setImageOk(true);
+  }, [imageUrl]);
 
-export function HospitalDetailPanel({ hospital, open, onClose }: HospitalDetailPanelProps) {
   return (
     <div
       className={cn(
@@ -71,7 +78,7 @@ export function HospitalDetailPanel({ hospital, open, onClose }: HospitalDetailP
             <div className="min-w-0">
               <div className="text-xs font-semibold text-slate-500">Detalle del establecimiento</div>
               <div className="truncate text-base font-extrabold text-slate-900">
-                {hospital ? hospital.name : "Selecciona un hospital"}
+                {hospital ? hospital.nombre_establecimiento : "Selecciona un establecimiento"}
               </div>
             </div>
             <Button variant="secondary" size="sm" onClick={onClose}>
@@ -79,54 +86,104 @@ export function HospitalDetailPanel({ hospital, open, onClose }: HospitalDetailP
             </Button>
           </div>
 
-          {hospital ? (
+          {loading ? (
+            <div className="flex h-full items-center justify-center px-8 text-center text-sm text-slate-500">
+              Cargando detalle…
+            </div>
+          ) : error ? (
+            <div className="flex h-full items-center justify-center px-8 text-center text-sm text-slate-700">
+              {error}
+            </div>
+          ) : hospital ? (
             <div className="flex h-full flex-col overflow-auto">
               <div className="px-4 pt-4">
                 <div className="aspect-[16/9] overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-br from-blue-50 to-emerald-50">
-                  <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-500">
-                    Foto (placeholder)
-                  </div>
+                  {imageUrl && imageOk ? (
+                    <div className="relative h-full w-full">
+                      <Image
+                        src={imageUrl}
+                        alt={hospital.nombre_establecimiento || "Imagen del establecimiento"}
+                        fill
+                        sizes="480px"
+                        className="object-cover"
+                        unoptimized
+                        onError={() => setImageOk(false)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-500">
+                      Sin foto
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="grid gap-4 px-4 py-4">
-                <div className="flex flex-wrap gap-2">
-                  <Badge tone="blue">{hospital.sector}</Badge>
-                  <Badge tone="gray">{hospital.establishmentType}</Badge>
-                  <Badge tone="green">Ruralidad: {hospital.rurality}</Badge>
-                </div>
-
                 <div className="grid gap-3 rounded-2xl border border-[var(--border)] bg-white p-4">
-                  <Field label="Dirección" value={hospital.address} />
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <Field label="Región" value={hospital.region} />
-                    <Field label="Provincia" value={hospital.province} />
-                    <Field label="Distrito" value={hospital.district} />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field
+                      label="Profesión"
+                      value={
+                        hospital.profesiones && hospital.profesiones.length > 0
+                          ? hospital.profesiones.join(" · ")
+                          : hospital.profesion || "—"
+                      }
+                    />
+                    <Field label="Institución" value={hospital.institucion || "—"} />
+                    <Field label="Departamento" value={hospital.departamento || "—"} />
+                    <Field label="Provincia" value={hospital.provincia || "—"} />
+                    <Field label="Distrito" value={hospital.distrito || "—"} />
+                    <Field label="Grado de dificultad" value={hospital.grado_dificultad || "—"} />
+                    <Field
+                      label="Código RENIPRESS modular"
+                      value={hospital.codigo_renipress_modular || "—"}
+                    />
+                    <Field
+                      label="Coordenadas"
+                      value={`${hospital.lat.toFixed(6)}, ${hospital.lng.toFixed(6)}`}
+                    />
+                    <Field
+                      label="Fuente coordenadas"
+                      value={
+                        hospital.coordenadas_fuente
+                          ? hospital.coordenadas_fuente === "RENIPRESS"
+                            ? "RENIPRESS (exacta)"
+                            : `${hospital.coordenadas_fuente} (aprox)`
+                          : "—"
+                      }
+                    />
+                    <Field
+                      label="Nombre de establecimiento"
+                      value={hospital.nombre_establecimiento || "—"}
+                    />
+                    <Field label="Presupuesto" value={hospital.presupuesto || "—"} />
+                    <Field label="Categoría" value={hospital.categoria || "—"} />
+                    <Field label="ZAF" value={hospital.zaf || "—"} />
+                    <Field label="ZE" value={hospital.ze || "—"} />
                   </div>
                 </div>
 
                 <div className="grid gap-2">
-                  <div className="text-xs font-bold uppercase tracking-wide text-slate-600">
-                    Servicios disponibles
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {hospital.services.map((s) => (
-                      <span
-                        key={s}
-                        className="inline-flex items-center rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs font-semibold text-slate-700"
-                      >
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid gap-2">
-                  <Button variant="secondary" className="w-full">
-                    Qué hay cerca
+                  {(routeError || nearbyError) && (
+                    <div className="rounded-2xl border border-[var(--border)] bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+                      {routeError || nearbyError}
+                    </div>
+                  )}
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={onRequestNearby}
+                    disabled={!onRequestNearby || nearbyLoading}
+                  >
+                    {nearbyLoading ? "Buscando cerca…" : "Qué hay cerca"}
                   </Button>
-                  <Button variant="primary" className="w-full">
-                    Ver cómo llegar
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    onClick={onRequestRoute}
+                    disabled={!onRequestRoute || routeLoading}
+                  >
+                    {routeLoading ? "Calculando ruta…" : "Ver cómo llegar"}
                   </Button>
                 </div>
               </div>
