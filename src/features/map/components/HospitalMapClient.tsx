@@ -3,17 +3,20 @@ import L from "leaflet";
 import * as React from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 
-import { Hospital, NearbyPlacesResponse, RouteResponse } from "@/features/hospitals/types";
+import { HospitalMapItem, NearbyPlacesResponse, RouteResponse } from "@/features/hospitals/types";
 
 import "leaflet.markercluster";
 
 export type HospitalMapProps = {
-  hospitals: Hospital[];
+  hospitals: HospitalMapItem[];
   selectedHospitalId: string | null;
-  onSelectHospital: (hospital: Hospital) => void;
+  onSelectHospital: (hospital: HospitalMapItem) => void;
+  loading?: boolean;
   userLocation: { lat: number; lng: number } | null;
   route: RouteResponse | null;
+  routeLoading?: boolean;
   nearby: NearbyPlacesResponse | null;
+  nearbyLoading?: boolean;
   focus: { lat: number; lng: number; zoom?: number } | null;
 };
 
@@ -101,14 +104,34 @@ function FocusController({ focus }: { focus: { lat: number; lng: number; zoom?: 
   return null;
 }
 
+function RouteFitController({ routeLatLngs }: { routeLatLngs: Array<[number, number]> | null }) {
+  const map = useMap();
+  const prevRef = React.useRef<Array<[number, number]> | null>(null);
+
+  React.useEffect(() => {
+    if (!routeLatLngs || routeLatLngs.length === 0) {
+      prevRef.current = null;
+      return;
+    }
+
+    if (prevRef.current === routeLatLngs) return;
+    prevRef.current = routeLatLngs;
+
+    const bounds = L.latLngBounds(routeLatLngs.map(([lat, lng]) => L.latLng(lat, lng)));
+    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 16, animate: true });
+  }, [map, routeLatLngs]);
+
+  return null;
+}
+
 function ClusteredHospitalsLayer({
   hospitals,
   selectedHospitalId,
   onSelectHospital,
 }: {
-  hospitals: Hospital[];
+  hospitals: HospitalMapItem[];
   selectedHospitalId: string | null;
-  onSelectHospital: (hospital: Hospital) => void;
+  onSelectHospital: (hospital: HospitalMapItem) => void;
 }) {
   const map = useMap();
   const clusterRef = React.useRef<L.MarkerClusterGroup | null>(null);
@@ -121,7 +144,7 @@ function ClusteredHospitalsLayer({
   }, [onSelectHospital]);
 
   const hospitalsById = React.useMemo(() => {
-    const m = new Map<string, Hospital>();
+    const m = new Map<string, HospitalMapItem>();
     for (const h of hospitals) m.set(h.id, h);
     return m;
   }, [hospitals]);
@@ -227,13 +250,16 @@ function ClusteredHospitalsLayer({
   return null;
 }
 
-export function HospitalMapClient({
+const HospitalMapClient = React.memo(function HospitalMapClient({
   hospitals,
   selectedHospitalId,
   onSelectHospital,
+  loading = false,
   userLocation,
   route,
+  routeLoading = false,
   nearby,
+  nearbyLoading = false,
   focus,
 }: HospitalMapProps) {
   const routeLatLngs = React.useMemo(() => {
@@ -249,8 +275,21 @@ export function HospitalMapClient({
   const iconTiendas = React.useMemo(() => createPlaceIcon("#64748b"), []);
   const iconComisarias = React.useMemo(() => createPlaceIcon("#8b5cf6"), []);
 
+  const loadingLabel = React.useMemo(() => {
+    const parts: string[] = [];
+    if (loading) parts.push("Cargando establecimientos…");
+    if (routeLoading) parts.push("Calculando ruta…");
+    if (nearbyLoading) parts.push("Buscando cerca…");
+    return parts.length > 0 ? parts.join(" · ") : null;
+  }, [loading, nearbyLoading, routeLoading]);
+
   return (
-    <div className="h-full w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+    <div className="relative h-full w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+      {loadingLabel ? (
+        <div className="pointer-events-none absolute left-3 top-3 z-[1200] rounded-2xl border border-[var(--border)] bg-white/95 px-3 py-2 text-xs font-extrabold text-slate-700 shadow-sm backdrop-blur">
+          {loadingLabel}
+        </div>
+      ) : null}
       <MapContainer
         center={[-9.19, -75.0152]}
         zoom={5}
@@ -265,6 +304,7 @@ export function HospitalMapClient({
         />
 
         <FocusController focus={focus} />
+        <RouteFitController routeLatLngs={routeLatLngs} />
 
         {userLocation ? <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon} /> : null}
 
@@ -306,4 +346,6 @@ export function HospitalMapClient({
       </MapContainer>
     </div>
   );
-}
+});
+
+export { HospitalMapClient };

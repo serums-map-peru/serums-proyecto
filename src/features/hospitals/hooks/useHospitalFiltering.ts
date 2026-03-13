@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { Hospital, HospitalFilters } from "../types";
+import { Hospital, HospitalFilters, HospitalMapItem } from "../types";
 
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
@@ -66,30 +66,43 @@ type Options = {
 
 export function useHospitalFiltering() {
   const [filters, setFilters] = React.useState<HospitalFilters>(createInitialHospitalFilters());
-  const [hospitals, setHospitals] = React.useState<Hospital[]>([]);
-  const [allHospitals, setAllHospitals] = React.useState<Hospital[] | null>(null);
+  const [hospitals, setHospitals] = React.useState<HospitalMapItem[]>([]);
+  const [allHospitals, setAllHospitals] = React.useState<HospitalMapItem[] | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   const apiBase = React.useMemo(() => getApiBaseUrl(), []);
+
+  const fetchHospitalsMap = React.useCallback(
+    async (qs: string, signal: AbortSignal) => {
+      const preferred = `${apiBase}/hospitales/map${qs}`;
+      const fallback = `${apiBase}/hospitales${qs}`;
+
+      let r = await fetch(preferred, { signal });
+      if (r.status === 404) {
+        r = await fetch(fallback, { signal });
+      }
+
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        const message =
+          body && typeof body === "object" && body.error && body.error.message
+            ? String(body.error.message)
+            : "Error al cargar establecimientos";
+        throw new Error(message);
+      }
+
+      return (await r.json()) as HospitalMapItem[];
+    },
+    [apiBase],
+  );
 
   React.useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
 
-    fetch(`${apiBase}/hospitales`, { signal: controller.signal })
-      .then(async (r) => {
-        if (!r.ok) {
-          const body = await r.json().catch(() => null);
-          const message =
-            body && typeof body === "object" && body.error && body.error.message
-              ? String(body.error.message)
-              : "Error al cargar establecimientos";
-          throw new Error(message);
-        }
-        return r.json() as Promise<Hospital[]>;
-      })
+    fetchHospitalsMap("", controller.signal)
       .then((data) => {
         setAllHospitals(data);
         setHospitals(data);
@@ -102,27 +115,22 @@ export function useHospitalFiltering() {
       });
 
     return () => controller.abort();
-  }, [apiBase]);
+  }, [apiBase, fetchHospitalsMap]);
 
   React.useEffect(() => {
     if (!allHospitals) return;
+    const qs = buildHospitalQuery(filters);
+    if (!qs) {
+      setHospitals(allHospitals);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     const controller = new AbortController();
     setLoading(true);
     setError(null);
 
-    const qs = buildHospitalQuery(filters);
-    fetch(`${apiBase}/hospitales${qs}`, { signal: controller.signal })
-      .then(async (r) => {
-        if (!r.ok) {
-          const body = await r.json().catch(() => null);
-          const message =
-            body && typeof body === "object" && body.error && body.error.message
-              ? String(body.error.message)
-              : "Error al filtrar establecimientos";
-          throw new Error(message);
-        }
-        return r.json() as Promise<Hospital[]>;
-      })
+    fetchHospitalsMap(qs, controller.signal)
       .then((data) => {
         setHospitals(data);
         setLoading(false);
@@ -134,7 +142,7 @@ export function useHospitalFiltering() {
       });
 
     return () => controller.abort();
-  }, [apiBase, allHospitals, filters]);
+  }, [allHospitals, fetchHospitalsMap, filters]);
 
   const options: Options = React.useMemo(() => {
     const base = allHospitals ?? hospitals;
@@ -158,18 +166,21 @@ export function useHospitalFiltering() {
     };
   }, [allHospitals, hospitals]);
 
-  async function fetchHospitalById(id: string) {
-    const r = await fetch(`${apiBase}/hospitales/${encodeURIComponent(id)}`);
-    if (!r.ok) {
-      const body = await r.json().catch(() => null);
-      const message =
-        body && typeof body === "object" && body.error && body.error.message
-          ? String(body.error.message)
-          : "Error al obtener el establecimiento";
-      throw new Error(message);
-    }
-    return (await r.json()) as Hospital;
-  }
+  const fetchHospitalById = React.useCallback(
+    async (id: string) => {
+      const r = await fetch(`${apiBase}/hospitales/${encodeURIComponent(id)}`);
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        const message =
+          body && typeof body === "object" && body.error && body.error.message
+            ? String(body.error.message)
+            : "Error al obtener el establecimiento";
+        throw new Error(message);
+      }
+      return (await r.json()) as Hospital;
+    },
+    [apiBase],
+  );
 
   return {
     filters,

@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { HttpError } = require("../utils/httpError");
+const { getEnvNumber } = require("../utils/env");
+const { searchPlacesPe } = require("./nominatimService");
 
 function cleanString(value) {
   if (value == null) return "";
@@ -202,6 +204,333 @@ function parsePeruScaledCoord(value, kind) {
   return best;
 }
 
+function parseNumberLoose(value) {
+  const s = cleanString(value);
+  if (!s) return null;
+
+  let normalized = s.replace(/\s+/g, "");
+  if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(normalized)) {
+    normalized = normalized.replace(/,/g, "");
+  } else if (/^-?\d+(,\d+)+$/.test(normalized)) {
+    normalized = normalized.replace(/,/g, "");
+  } else {
+    normalized = normalized.replace(/,/g, ".");
+  }
+
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isWithinPeruBBox(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (lat < -20.7 || lat > 1.2) return false;
+  if (lng < -82.5 || lng > -67.0) return false;
+  return true;
+}
+
+function squaredDistance(a, b) {
+  const dLat = a.lat - b.lat;
+  const dLng = a.lng - b.lng;
+  return dLat * dLat + dLng * dLng;
+}
+
+function haversineKm(a, b) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+  const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function isReasonableForDepartment(coords, deptCenter) {
+  if (!coords) return false;
+  if (!deptCenter) return true;
+  const km = haversineKm(coords, deptCenter);
+  return km <= 900;
+}
+
+const GEOCODE_ENABLED = getEnvNumber("GEOCODE_ENABLED", 1) !== 0;
+const GEOCODE_INTERVAL_MS = getEnvNumber("GEOCODE_INTERVAL_MS", 1500);
+const GEOCODE_MAX_PER_BOOT = getEnvNumber("GEOCODE_MAX_PER_BOOT", 60);
+
+const geocodeQueue = [];
+const geocodeQueuedIds = new Set();
+const geocodeInFlight = new Set();
+let geocodeWorkerStarted = false;
+let geocodedCount = 0;
+
+function enqueueGeocodeIfNeeded(h) {
+  if (!GEOCODE_ENABLED) return;
+  if (!h || !h.id) return;
+  if (geocodedCount >= GEOCODE_MAX_PER_BOOT) return;
+  if (geocodeQueuedIds.has(h.id)) return;
+  if (h.coordenadas_fuente !== "DEPARTAMENTO") return;
+  if (!cleanString(h.nombre_establecimiento) || !cleanString(h.departamento) || !cleanString(h.provincia) || !cleanString(h.distrito))
+    return;
+  geocodeQueuedIds.add(h.id);
+  geocodeQueue.push(h);
+}
+
+function ensureGeocodeWorkerStarted() {
+  if (!GEOCODE_ENABLED) return;
+  if (geocodeWorkerStarted) return;
+  geocodeWorkerStarted = true;
+
+  setInterval(async () => {
+    if (geocodedCount >= GEOCODE_MAX_PER_BOOT) return;
+    const next = geocodeQueue.shift();
+    if (!next) return;
+    if (!next.id || geocodeInFlight.has(next.id)) return;
+    geocodeInFlight.add(next.id);
+    try {
+      await geocodeHospitalRecord(next);
+    } catch {
+    } finally {
+      geocodeInFlight.delete(next.id);
+    }
+  }, GEOCODE_INTERVAL_MS).unref?.();
+}
+
+function tokenize(value) {
+  return cleanString(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .split(/[^a-z0-9]+/g)
+    .filter(Boolean);
+}
+
+function includesAllTokens(haystack, tokens) {
+  if (!haystack) return false;
+  const normalized = haystack
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+  return tokens.every((t) => normalized.includes(t));
+}
+
+function bestNominatimMatch(results, hospital, deptCenter) {
+  const items = Array.isArray(results) ? results : [];
+  if (items.length === 0) return null;
+
+  const distTokens = tokenize(hospital.distrito);
+  const provTokens = tokenize(hospital.provincia);
+  const depTokens = tokenize(hospital.departamento);
+
+  const parsed = items
+    .map((it) => {
+      const lat = Number(it.lat);
+      const lng = Number(it.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      if (!isWithinPeruBBox(lat, lng)) return null;
+      const candidate = normalizePeruLatLng(lat, lng, deptCenter);
+      if (!candidate) return null;
+      if (!isReasonableForDepartment(candidate, deptCenter)) return null;
+
+      const display = cleanString(it.display_name);
+      const score =
+        (includesAllTokens(display, depTokens) ? 6 : 0) +
+        (includesAllTokens(display, provTokens) ? 4 : 0) +
+        (includesAllTokens(display, distTokens) ? 3 : 0) +
+        (typeof it.importance === "number" ? it.importance : 0);
+
+      const distancePenalty = deptCenter ? haversineKm(candidate, deptCenter) / 300 : 0;
+      return { lat: candidate.lat, lng: candidate.lng, score: score - distancePenalty };
+    })
+    .filter(Boolean);
+
+  if (parsed.length === 0) return null;
+  let best = parsed[0];
+  for (let i = 1; i < parsed.length; i++) {
+    if (parsed[i].score > best.score) best = parsed[i];
+  }
+  return { lat: best.lat, lng: best.lng };
+}
+
+async function geocodeHospitalRecord(hospital) {
+  if (!GEOCODE_ENABLED) return null;
+  if (!hospital || !hospital.id) return null;
+  if (hospital.coordenadas_fuente && hospital.coordenadas_fuente !== "DEPARTAMENTO") return null;
+
+  const deptCenter = getCoordsForDepartment(hospital.departamento);
+
+  const nombre = cleanString(hospital.nombre_establecimiento);
+  const distrito = cleanString(hospital.distrito);
+  const provincia = cleanString(hospital.provincia);
+  const departamento = cleanString(hospital.departamento);
+
+  const queries = [
+    `${nombre}, ${distrito}, ${provincia}, ${departamento}, Peru`,
+    `${distrito}, ${provincia}, ${departamento}, Peru`,
+    `${provincia}, ${departamento}, Peru`,
+  ].filter((q) => cleanString(q).length > 0);
+
+  for (const q of queries) {
+    const results = await searchPlacesPe(q);
+    const match = bestNominatimMatch(results, hospital, deptCenter);
+    if (match) {
+      hospital.lat = match.lat;
+      hospital.lng = match.lng;
+      hospital.coordenadas_fuente = "NOMINATIM";
+      geocodedCount += 1;
+      return match;
+    }
+  }
+
+  return null;
+}
+
+function normalizePeruLatLng(lat, lng, hintCenter) {
+  if (lat == null || lng == null) return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const center = hintCenter && Number.isFinite(hintCenter.lat) && Number.isFinite(hintCenter.lng) ? hintCenter : null;
+
+  const raw = { lat, lng };
+  const candidates = [
+    raw,
+    { lat: raw.lat, lng: -raw.lng },
+    { lat: -raw.lat, lng: raw.lng },
+    { lat: -raw.lat, lng: -raw.lng },
+    { lat: raw.lng, lng: raw.lat },
+    { lat: raw.lng, lng: -raw.lat },
+    { lat: -raw.lng, lng: raw.lat },
+    { lat: -raw.lng, lng: -raw.lat },
+  ];
+
+  const valid = candidates.filter((c) => isWithinPeruBBox(c.lat, c.lng));
+  if (valid.length === 0) return null;
+  if (!center) return valid[0];
+
+  let best = valid[0];
+  let bestScore = squaredDistance(best, center);
+  for (let i = 1; i < valid.length; i++) {
+    const c = valid[i];
+    const sc = squaredDistance(c, center);
+    if (sc < bestScore) {
+      best = c;
+      bestScore = sc;
+    }
+  }
+  return best;
+}
+
+function utmToLatLng(easting, northing, zoneNumber, southernHemisphere) {
+  const a = 6378137;
+  const eccSquared = 0.00669438;
+  const k0 = 0.9996;
+
+  const x = easting - 500000.0;
+  let y = northing;
+  if (southernHemisphere) y -= 10000000.0;
+
+  const eccPrimeSquared = eccSquared / (1 - eccSquared);
+  const M = y / k0;
+  const mu = M / (a * (1 - eccSquared / 4 - (3 * eccSquared * eccSquared) / 64 - (5 * eccSquared * eccSquared * eccSquared) / 256));
+
+  const e1 = (1 - Math.sqrt(1 - eccSquared)) / (1 + Math.sqrt(1 - eccSquared));
+
+  const J1 = (3 * e1) / 2 - (27 * e1 * e1 * e1) / 32;
+  const J2 = (21 * e1 * e1) / 16 - (55 * e1 * e1 * e1 * e1) / 32;
+  const J3 = (151 * e1 * e1 * e1) / 96;
+  const J4 = (1097 * e1 * e1 * e1 * e1) / 512;
+
+  const phi1Rad = mu + J1 * Math.sin(2 * mu) + J2 * Math.sin(4 * mu) + J3 * Math.sin(6 * mu) + J4 * Math.sin(8 * mu);
+
+  const sinPhi1 = Math.sin(phi1Rad);
+  const cosPhi1 = Math.cos(phi1Rad);
+  const tanPhi1 = Math.tan(phi1Rad);
+
+  const N1 = a / Math.sqrt(1 - eccSquared * sinPhi1 * sinPhi1);
+  const T1 = tanPhi1 * tanPhi1;
+  const C1 = eccPrimeSquared * cosPhi1 * cosPhi1;
+  const R1 = (a * (1 - eccSquared)) / Math.pow(1 - eccSquared * sinPhi1 * sinPhi1, 1.5);
+  const D = x / (N1 * k0);
+
+  const latRad =
+    phi1Rad -
+    (N1 * tanPhi1) /
+      R1 *
+      (D * D / 2 -
+        ((5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * eccPrimeSquared) * D * D * D * D) / 24 +
+        ((61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * eccPrimeSquared - 3 * C1 * C1) * D * D * D * D * D * D) / 720);
+
+  const lonOrigin = (zoneNumber - 1) * 6 - 180 + 3;
+  const lonRad =
+    (D -
+      ((1 + 2 * T1 + C1) * D * D * D) / 6 +
+      ((5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * eccPrimeSquared + 24 * T1 * T1) * D * D * D * D * D) / 120) /
+    cosPhi1;
+
+  const lat = (latRad * 180) / Math.PI;
+  const lng = lonOrigin + (lonRad * 180) / Math.PI;
+  return { lat, lng };
+}
+
+function parseRenipressLatLng(norteRaw, esteRaw, departamentoHint) {
+  const northing = parseNumberLoose(norteRaw);
+  const easting = parseNumberLoose(esteRaw);
+  const deptCenter = getCoordsForDepartment(departamentoHint);
+
+  if (northing == null || easting == null) {
+    const latA = parsePeruScaledCoord(norteRaw, "lat");
+    const lngA = parsePeruScaledCoord(esteRaw, "lon");
+    const normalizedA = latA != null && lngA != null ? normalizePeruLatLng(latA, lngA, deptCenter) : null;
+
+    const latB = parsePeruScaledCoord(esteRaw, "lat");
+    const lngB = parsePeruScaledCoord(norteRaw, "lon");
+    const normalizedB = latB != null && lngB != null ? normalizePeruLatLng(latB, lngB, deptCenter) : null;
+
+    if (normalizedA && normalizedB) {
+      return squaredDistance(normalizedA, deptCenter) <= squaredDistance(normalizedB, deptCenter) ? normalizedA : normalizedB;
+    }
+    return normalizedA ?? normalizedB;
+  }
+
+  const looksUtm =
+    Math.abs(easting) > 1000 &&
+    Math.abs(northing) > 1000 &&
+    easting >= 100000 &&
+    easting <= 900000 &&
+    northing >= 0 &&
+    northing <= 10000000;
+
+  if (!looksUtm) {
+    const normalizedA = normalizePeruLatLng(parsePeruScaledCoord(norteRaw, "lat"), parsePeruScaledCoord(esteRaw, "lon"), deptCenter);
+    const normalizedB = normalizePeruLatLng(parsePeruScaledCoord(esteRaw, "lat"), parsePeruScaledCoord(norteRaw, "lon"), deptCenter);
+    if (normalizedA && normalizedB) {
+      return squaredDistance(normalizedA, deptCenter) <= squaredDistance(normalizedB, deptCenter) ? normalizedA : normalizedB;
+    }
+    return normalizedA ?? normalizedB;
+  }
+
+  const zones = [17, 18, 19];
+  const candidates = [];
+  for (const zone of zones) {
+    const converted = utmToLatLng(easting, northing, zone, true);
+    const normalized = normalizePeruLatLng(converted.lat, converted.lng, deptCenter);
+    if (normalized) candidates.push(normalized);
+  }
+  if (candidates.length === 0) return null;
+  let best = candidates[0];
+  let bestScore = squaredDistance(best, deptCenter);
+  for (let i = 1; i < candidates.length; i++) {
+    const c = candidates[i];
+    const sc = squaredDistance(c, deptCenter);
+    if (sc < bestScore) {
+      best = c;
+      bestScore = sc;
+    }
+  }
+  return best;
+}
+
 let renipressCached = null;
 
 function loadRenipressIndex() {
@@ -243,6 +572,7 @@ function loadRenipressIndex() {
   const idxImg1 = headerIndex.get("IMAGEN_1");
   const idxImg2 = headerIndex.get("IMAGEN_2");
   const idxImg3 = headerIndex.get("IMAGEN_3");
+  const idxDepartamento = headerIndex.get("DEPARTAMENTO");
 
   const byCode = new Map();
   for (let r = 1; r < rows.length; r++) {
@@ -255,8 +585,7 @@ function loadRenipressIndex() {
 
     const norteRaw = idxNorte != null && idxNorte < row.length ? row[idxNorte] : "";
     const esteRaw = idxEste != null && idxEste < row.length ? row[idxEste] : "";
-    const lat = parsePeruScaledCoord(norteRaw, "lat");
-    const lng = parsePeruScaledCoord(esteRaw, "lon");
+    const departamento = idxDepartamento != null && idxDepartamento < row.length ? cleanString(row[idxDepartamento]) : "";
 
     const images = [];
     const img1 = idxImg1 != null && idxImg1 < row.length ? cleanString(row[idxImg1]) : "";
@@ -268,15 +597,17 @@ function loadRenipressIndex() {
 
     const existing = byCode.get(code);
     if (existing) {
-      if (existing.lat == null && lat != null) existing.lat = lat;
-      if (existing.lng == null && lng != null) existing.lng = lng;
+      if (!existing.norteRaw && norteRaw) existing.norteRaw = norteRaw;
+      if (!existing.esteRaw && esteRaw) existing.esteRaw = esteRaw;
+      if (!existing.departamento && departamento) existing.departamento = departamento;
       if ((!existing.imagenes || existing.imagenes.length === 0) && images.length > 0) {
         existing.imagenes = images;
       }
     } else {
       byCode.set(code, {
-        lat,
-        lng,
+        norteRaw,
+        esteRaw,
+        departamento,
         imagenes: images,
       });
     }
@@ -405,18 +736,28 @@ function loadHospitalsFromCsv() {
         profesiones: profession ? [profession] : [],
       };
 
-      if (renipress && renipress.lat != null && renipress.lng != null) {
-        agg.lat = renipress.lat;
-        agg.lng = renipress.lng;
+      const deptCoords = getCoordsForDepartment(record.departamento);
+      const renipressBaseCoords =
+        renipress && (renipress.norteRaw || renipress.esteRaw)
+          ? parseRenipressLatLng(renipress.norteRaw, renipress.esteRaw, record.departamento || renipress.departamento || "")
+          : null;
+      const renipressCandidate = renipressBaseCoords
+        ? normalizePeruLatLng(renipressBaseCoords.lat, renipressBaseCoords.lng, deptCoords)
+        : null;
+      const renipressCoords = isReasonableForDepartment(renipressCandidate, deptCoords) ? renipressCandidate : null;
+      const csvCoords = lat != null && lon != null ? normalizePeruLatLng(lat, lon, deptCoords) : null;
+
+      if (renipressCoords) {
+        agg.lat = renipressCoords.lat;
+        agg.lng = renipressCoords.lng;
         agg.coordenadas_fuente = "RENIPRESS";
-      } else if (lat != null && lon != null) {
-        agg.lat = lat;
-        agg.lng = lon;
+      } else if (csvCoords && isReasonableForDepartment(csvCoords, deptCoords)) {
+        agg.lat = csvCoords.lat;
+        agg.lng = csvCoords.lng;
         agg.coordenadas_fuente = "CSV";
       } else {
-        const coords = getCoordsForDepartment(record.departamento);
-        agg.lat = coords.lat;
-        agg.lng = coords.lng;
+        agg.lat = deptCoords.lat;
+        agg.lng = deptCoords.lng;
         agg.coordenadas_fuente = "DEPARTAMENTO";
       }
 
@@ -429,10 +770,22 @@ function loadHospitalsFromCsv() {
       if (profession && !agg.profesiones.includes(profession)) {
         agg.profesiones.push(profession);
       }
-      if (agg.coordenadas_fuente !== "RENIPRESS" && renipress && renipress.lat != null && renipress.lng != null) {
-        agg.lat = renipress.lat;
-        agg.lng = renipress.lng;
-        agg.coordenadas_fuente = "RENIPRESS";
+      if (agg.coordenadas_fuente !== "RENIPRESS" && renipress && (renipress.norteRaw || renipress.esteRaw)) {
+        const deptCoords = getCoordsForDepartment(agg.departamento || record.departamento);
+        const renipressBaseCoords = parseRenipressLatLng(
+          renipress.norteRaw,
+          renipress.esteRaw,
+          agg.departamento || record.departamento || renipress.departamento || "",
+        );
+        const renipressCandidate = renipressBaseCoords
+          ? normalizePeruLatLng(renipressBaseCoords.lat, renipressBaseCoords.lng, deptCoords)
+          : null;
+        const renipressCoords = isReasonableForDepartment(renipressCandidate, deptCoords) ? renipressCandidate : null;
+        if (renipressCoords) {
+          agg.lat = renipressCoords.lat;
+          agg.lng = renipressCoords.lng;
+          agg.coordenadas_fuente = "RENIPRESS";
+        }
       }
       if (
         (!agg.imagenes || agg.imagenes.length === 0) &&
@@ -452,9 +805,12 @@ function loadHospitalsFromCsv() {
     profs.sort((a, b) => a.localeCompare(b));
     agg.profesiones = profs;
     agg.profesion = profs.length > 0 ? profs[0] : cleanString(agg.profesion);
+    enqueueGeocodeIfNeeded(agg);
     records.push(agg);
     byId.set(agg.id, agg);
   }
+
+  ensureGeocodeWorkerStarted();
 
   cached = {
     mtimeMs: stat.mtimeMs,
@@ -510,4 +866,13 @@ async function getHospitalById(id) {
   return hospital;
 }
 
-module.exports = { listHospitals, getHospitalById };
+async function geocodeHospitalById(id) {
+  const hospital = await getHospitalById(id);
+  try {
+    await geocodeHospitalRecord(hospital);
+  } catch {
+  }
+  return hospital;
+}
+
+module.exports = { listHospitals, getHospitalById, geocodeHospitalById };

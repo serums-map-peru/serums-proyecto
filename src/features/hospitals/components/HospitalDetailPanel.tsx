@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 
-import { Hospital } from "@/features/hospitals/types";
+import { Hospital, RouteResponse } from "@/features/hospitals/types";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
 import { Card } from "@/shared/ui/Card";
@@ -14,6 +14,7 @@ export type HospitalDetailPanelProps = {
   error?: string | null;
   open: boolean;
   onClose: () => void;
+  route?: RouteResponse | null;
   routeLoading?: boolean;
   routeError?: string | null;
   nearbyLoading?: boolean;
@@ -31,12 +32,36 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function formatDistance(meters: number) {
+  if (!Number.isFinite(meters)) return "—";
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds)) return "—";
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
+function formatUbicacionFuente(source: string | null | undefined) {
+  if (!source) return "—";
+  if (source === "RENIPRESS") return "Exacta (RENIPRESS)";
+  if (source === "CSV") return "Aproximada (CSV)";
+  if (source === "DEPARTAMENTO") return "Aproximada (centro de departamento)";
+  return `Aproximada (${source})`;
+}
+
 export function HospitalDetailPanel({
   hospital,
   loading = false,
   error = null,
   open,
   onClose,
+  route = null,
   routeLoading = false,
   routeError = null,
   nearbyLoading = false,
@@ -143,13 +168,9 @@ export function HospitalDetailPanel({
                       value={`${hospital.lat.toFixed(6)}, ${hospital.lng.toFixed(6)}`}
                     />
                     <Field
-                      label="Fuente coordenadas"
+                      label="Ubicación"
                       value={
-                        hospital.coordenadas_fuente
-                          ? hospital.coordenadas_fuente === "RENIPRESS"
-                            ? "RENIPRESS (exacta)"
-                            : `${hospital.coordenadas_fuente} (aprox)`
-                          : "—"
+                        formatUbicacionFuente(hospital.coordenadas_fuente)
                       }
                     />
                     <Field
@@ -164,6 +185,14 @@ export function HospitalDetailPanel({
                 </div>
 
                 <div className="grid gap-2">
+                  {route ? (
+                    <div className="rounded-2xl border border-[var(--border)] bg-white px-4 py-3">
+                      <div className="text-xs font-semibold text-slate-500">Ruta estimada</div>
+                      <div className="text-sm font-extrabold text-slate-900">
+                        {formatDistance(route.distancia)} · {formatDuration(route.duracion)}
+                      </div>
+                    </div>
+                  ) : null}
                   {(routeError || nearbyError) && (
                     <div className="rounded-2xl border border-[var(--border)] bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
                       {routeError || nearbyError}
@@ -175,7 +204,7 @@ export function HospitalDetailPanel({
                     onClick={onRequestNearby}
                     disabled={!onRequestNearby || nearbyLoading}
                   >
-                    {nearbyLoading ? "Buscando cerca…" : "Qué hay cerca"}
+                    {nearbyLoading ? "Buscando cerca…" : nearbyError ? "Reintentar cerca" : "Qué hay cerca"}
                   </Button>
                   <Button
                     variant="primary"
@@ -183,7 +212,7 @@ export function HospitalDetailPanel({
                     onClick={onRequestRoute}
                     disabled={!onRequestRoute || routeLoading}
                   >
-                    {routeLoading ? "Calculando ruta…" : "Ver cómo llegar"}
+                    {routeLoading ? "Calculando ruta…" : routeError ? "Reintentar ruta" : "Ver cómo llegar"}
                   </Button>
                 </div>
               </div>

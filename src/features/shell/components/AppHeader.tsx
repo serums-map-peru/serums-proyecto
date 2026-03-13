@@ -8,11 +8,15 @@ import { NominatimResult } from "@/features/hospitals/types";
 
 export type AppHeaderProps = {
   onOpenFilters: () => void;
+  onCenterOnUser?: () => void;
+  centerOnUserLoading?: boolean;
   searchValue: string;
   searchLoading: boolean;
+  searchError?: string | null;
   searchResults: NominatimResult[];
   onSearchChange: (value: string) => void;
   onSelectSearchResult: (item: NominatimResult) => void;
+  onRetrySearch?: () => void;
 };
 
 function UserIcon() {
@@ -46,13 +50,33 @@ function FilterIcon() {
   );
 }
 
+function CrosshairIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+      <path d="M12 2v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M12 19v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M2 12h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M19 12h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path
+        d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
 export function AppHeader({
   onOpenFilters,
+  onCenterOnUser,
+  centerOnUserLoading = false,
   searchValue,
   searchLoading,
+  searchError = null,
   searchResults,
   onSearchChange,
   onSelectSearchResult,
+  onRetrySearch,
 }: AppHeaderProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -86,11 +110,25 @@ export function AppHeader({
             <div
               className={cn(
                 "absolute left-0 right-0 top-[calc(100%+8px)] z-[3500] overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_14px_40px_rgba(15,23,42,0.12)]",
-                open && (searchLoading || searchResults.length > 0) ? "block" : "hidden",
+                open && (searchLoading || searchResults.length > 0 || !!searchError) ? "block" : "hidden",
               )}
             >
               {searchLoading ? (
                 <div className="px-4 py-3 text-sm font-semibold text-slate-600">Buscando…</div>
+              ) : searchError ? (
+                <div className="grid gap-2 px-4 py-3">
+                  <div className="text-sm font-semibold text-slate-700">{searchError}</div>
+                  {onRetrySearch ? (
+                    <button
+                      type="button"
+                      className="w-fit rounded-2xl border border-[var(--border)] bg-white px-3 py-2 text-xs font-extrabold text-slate-800 shadow-sm hover:bg-slate-50"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={onRetrySearch}
+                    >
+                      Reintentar
+                    </button>
+                  ) : null}
+                </div>
               ) : (
                 <div className="max-h-[340px] overflow-auto">
                   {searchResults.map((r) => (
@@ -113,6 +151,15 @@ export function AppHeader({
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <IconButton
+              onClick={onCenterOnUser}
+              disabled={!onCenterOnUser || centerOnUserLoading}
+              aria-label="Centrar en mi ubicación"
+              title="Centrar en mi ubicación"
+            >
+              <CrosshairIcon />
+            </IconButton>
+
             <IconButton
               className="sm:hidden"
               onClick={onOpenFilters}
@@ -143,11 +190,25 @@ export function AppHeader({
           <div
             className={cn(
               "absolute left-0 right-0 top-[calc(100%+8px)] z-[3500] overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_14px_40px_rgba(15,23,42,0.12)]",
-              open && (searchLoading || searchResults.length > 0) ? "block" : "hidden",
+              open && (searchLoading || searchResults.length > 0 || !!searchError) ? "block" : "hidden",
             )}
           >
             {searchLoading ? (
               <div className="px-4 py-3 text-sm font-semibold text-slate-600">Buscando…</div>
+            ) : searchError ? (
+              <div className="grid gap-2 px-4 py-3">
+                <div className="text-sm font-semibold text-slate-700">{searchError}</div>
+                {onRetrySearch ? (
+                  <button
+                    type="button"
+                    className="w-fit rounded-2xl border border-[var(--border)] bg-white px-3 py-2 text-xs font-extrabold text-slate-800 shadow-sm hover:bg-slate-50"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={onRetrySearch}
+                  >
+                    Reintentar
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <div className="max-h-[320px] overflow-auto">
                 {searchResults.map((r) => (

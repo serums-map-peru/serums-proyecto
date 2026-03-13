@@ -19,6 +19,23 @@ export type Hospital = {
   coordenadas_fuente?: string;
 };
 
+export type HospitalMapItem = {
+  id: string;
+  profesion: string;
+  profesiones?: string[];
+  institucion: string;
+  departamento: string;
+  provincia: string;
+  distrito: string;
+  grado_dificultad: string;
+  nombre_establecimiento: string;
+  categoria: string;
+  zaf: string;
+  ze: string;
+  lat: number;
+  lng: number;
+};
+
 export type HospitalFilters = {
   profesion: string | null;
   institucion: string | null;

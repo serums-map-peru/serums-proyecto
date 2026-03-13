@@ -5,10 +5,24 @@ import * as React from "react";
 import { FiltersBar } from "@/features/hospitals/components/FiltersBar";
 import { HospitalDetailPanel } from "@/features/hospitals/components/HospitalDetailPanel";
 import { useHospitalFiltering } from "@/features/hospitals/hooks/useHospitalFiltering";
-import { Hospital, NearbyPlacesResponse, NominatimResult, RouteResponse } from "@/features/hospitals/types";
+import { Hospital, HospitalMapItem, NearbyPlacesResponse, NominatimResult, RouteResponse } from "@/features/hospitals/types";
 import { HospitalMap } from "@/features/map/components/HospitalMap";
 import { AppHeader } from "@/features/shell/components/AppHeader";
 import { cn } from "@/shared/lib/cn";
+
+function geolocationErrorMessage(err: unknown) {
+  const code =
+    err && typeof err === "object" && "code" in err && typeof (err as { code?: unknown }).code === "number"
+      ? (err as { code: number }).code
+      : null;
+
+  if (code === 1) return "Permiso de ubicación denegado.";
+  if (code === 2) return "No se pudo determinar tu ubicación.";
+  if (code === 3) return "Tiempo de espera agotado al obtener la ubicación.";
+
+  if (err instanceof Error && err.message) return err.message;
+  return "No se pudo obtener tu ubicación.";
+}
 
 function Legend() {
   const items = [
@@ -65,13 +79,18 @@ export default function HomePage() {
   const [routeLoading, setRouteLoading] = React.useState(false);
   const [routeError, setRouteError] = React.useState<string | null>(null);
 
+  const [centerOnUserLoading, setCenterOnUserLoading] = React.useState(false);
+  const [locationError, setLocationError] = React.useState<string | null>(null);
+
   const [nearby, setNearby] = React.useState<NearbyPlacesResponse | null>(null);
   const [nearbyLoading, setNearbyLoading] = React.useState(false);
   const [nearbyError, setNearbyError] = React.useState<string | null>(null);
 
   const [searchValue, setSearchValue] = React.useState("");
   const [searchLoading, setSearchLoading] = React.useState(false);
+  const [searchError, setSearchError] = React.useState<string | null>(null);
   const [searchResults, setSearchResults] = React.useState<NominatimResult[]>([]);
+  const [searchNonce, setSearchNonce] = React.useState(0);
   const [focus, setFocus] = React.useState<{ lat: number; lng: number; zoom?: number } | null>(null);
 
   React.useEffect(() => {
@@ -89,12 +108,19 @@ export default function HomePage() {
     if (query.length < 3) {
       setSearchResults([]);
       setSearchLoading(false);
+      setSearchError(null);
       return;
     }
 
     const controller = new AbortController();
     setSearchLoading(true);
+    setSearchError(null);
     const t = setTimeout(() => {
+      let didTimeout = false;
+      const timeoutId = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+      }, 10_000);
       fetch(`${apiBase}/buscar?q=${encodeURIComponent(query)}`, { signal: controller.signal })
         .then(async (r) => {
           if (!r.ok) {
@@ -102,7 +128,7 @@ export default function HomePage() {
             const message =
               body && typeof body === "object" && body.error && body.error.message
                 ? String(body.error.message)
-                : "Error al buscar";
+                : "Error al buscar. Reintenta.";
             throw new Error(message);
           }
           return r.json() as Promise<NominatimResult[]>;
@@ -112,17 +138,25 @@ export default function HomePage() {
           setSearchLoading(false);
         })
         .catch((e) => {
-          if (e && e.name === "AbortError") return;
+          if (e && e.name === "AbortError") {
+            if (!didTimeout) return;
+            setSearchResults([]);
+            setSearchLoading(false);
+            setSearchError("Servicio de búsqueda lento o no disponible. Reintenta.");
+            return;
+          }
           setSearchResults([]);
           setSearchLoading(false);
-        });
+          setSearchError(e instanceof Error ? e.message : "Error al buscar. Reintenta.");
+        })
+        .finally(() => clearTimeout(timeoutId));
     }, 320);
 
     return () => {
       clearTimeout(t);
       controller.abort();
     };
-  }, [apiBase, searchValue]);
+  }, [apiBase, searchNonce, searchValue]);
 
   const handleSelectSearchResult = React.useCallback((item: NominatimResult) => {
     setSearchValue(item.display_name);
@@ -147,29 +181,37 @@ export default function HomePage() {
 
   const handleRequestRoute = React.useCallback(async () => {
     if (!selectedHospital) return;
+    const approxWarning =
+      selectedHospital.coordenadas_fuente && selectedHospital.coordenadas_fuente !== "RENIPRESS"
+        ? "Ubicación aproximada: este establecimiento no tiene coordenadas exactas (RENIPRESS). La ruta puede no llegar al punto real."
+        : null;
     setRouteLoading(true);
     setRouteError(null);
+    setLocationError(null);
     try {
       const loc = await requestGeolocation();
       setUserLocation(loc);
-      if (selectedHospital.coordenadas_fuente && selectedHospital.coordenadas_fuente !== "RENIPRESS") {
-        setRouteError(
-          "Ubicación aproximada: este establecimiento no tiene coordenadas exactas (RENIPRESS). La ruta puede no llegar al punto real.",
-        );
-      }
+      if (approxWarning) setRouteError(approxWarning);
       const qs = new URLSearchParams({
         latUsuario: String(loc.lat),
         lonUsuario: String(loc.lng),
         latHospital: String(selectedHospital.lat),
         lonHospital: String(selectedHospital.lng),
       }).toString();
-      const r = await fetch(`${apiBase}/ruta?${qs}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15_000);
+      let r;
+      try {
+        r = await fetch(`${apiBase}/ruta?${qs}`, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!r.ok) {
         const body = await r.json().catch(() => null);
         const message =
           body && typeof body === "object" && body.error && body.error.message
             ? String(body.error.message)
-            : "Error al calcular ruta";
+            : "Error al calcular ruta. Reintenta.";
         throw new Error(message);
       }
       const data = (await r.json()) as RouteResponse;
@@ -177,45 +219,125 @@ export default function HomePage() {
       setFocus(null);
     } catch (e) {
       setRoute(null);
-      setRouteError(e instanceof Error ? e.message : "Error al calcular ruta");
+      const msg =
+        e && typeof e === "object" && "name" in e && e.name === "AbortError"
+          ? "Servicio de rutas lento o no disponible. Reintenta."
+          : geolocationErrorMessage(e);
+      setRouteError(approxWarning ? `${approxWarning} ${msg}` : msg);
     } finally {
       setRouteLoading(false);
     }
   }, [apiBase, requestGeolocation, selectedHospital]);
 
+  const handleCenterOnUser = React.useCallback(async () => {
+    setCenterOnUserLoading(true);
+    setLocationError(null);
+    try {
+      const loc = await requestGeolocation();
+      setUserLocation(loc);
+      setFocus({ lat: loc.lat, lng: loc.lng, zoom: 15 });
+    } catch (e) {
+      setLocationError(geolocationErrorMessage(e));
+    } finally {
+      setCenterOnUserLoading(false);
+    }
+  }, [requestGeolocation]);
+
   const handleRequestNearby = React.useCallback(async () => {
     if (!selectedHospital) return;
+    const approxWarning =
+      selectedHospital.coordenadas_fuente && selectedHospital.coordenadas_fuente !== "RENIPRESS"
+        ? "Ubicación aproximada: este establecimiento no tiene coordenadas exactas (RENIPRESS). Los resultados de “cerca” pueden no ser precisos."
+        : null;
     setNearbyLoading(true);
     setNearbyError(null);
     try {
-      const r = await fetch(`${apiBase}/lugares-cercanos/${encodeURIComponent(selectedHospital.id)}`);
+      if (approxWarning) setNearbyError(approxWarning);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15_000);
+      let r;
+      try {
+        r = await fetch(`${apiBase}/lugares-cercanos/${encodeURIComponent(selectedHospital.id)}`, {
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!r.ok) {
         const body = await r.json().catch(() => null);
         const message =
           body && typeof body === "object" && body.error && body.error.message
             ? String(body.error.message)
-            : "Error al buscar lugares cercanos";
+            : "Error al buscar lugares cercanos. Reintenta.";
         throw new Error(message);
       }
       const data = (await r.json()) as NearbyPlacesResponse;
       setNearby(data);
     } catch (e) {
       setNearby(null);
-      setNearbyError(e instanceof Error ? e.message : "Error al buscar lugares cercanos");
+      const msg =
+        e && typeof e === "object" && "name" in e && e.name === "AbortError"
+          ? "Servicio de lugares cercanos lento o no disponible. Reintenta."
+          : e instanceof Error
+            ? e.message
+            : "Error al buscar lugares cercanos. Reintenta.";
+      setNearbyError(approxWarning ? `${approxWarning} ${msg}` : msg);
     } finally {
       setNearbyLoading(false);
     }
   }, [apiBase, selectedHospital]);
 
+  const handleSelectHospital = React.useCallback(
+    async (h: HospitalMapItem) => {
+      setSelectedHospitalId(h.id);
+      setSelectedHospital(null);
+      setDetailOpen(true);
+      setDetailLoading(true);
+      setDetailError(null);
+      setRoute(null);
+      setRouteError(null);
+      setNearby(null);
+      setNearbyError(null);
+      setFocus({ lat: h.lat, lng: h.lng, zoom: 16 });
+      try {
+        const full = await fetchHospitalById(h.id);
+        setSelectedHospital(full);
+        if (Number.isFinite(full.lat) && Number.isFinite(full.lng) && (full.lat !== h.lat || full.lng !== h.lng)) {
+          setFocus({ lat: full.lat, lng: full.lng, zoom: 16 });
+        }
+      } catch (e) {
+        setDetailError(e instanceof Error ? e.message : "Error al cargar detalle");
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [fetchHospitalById],
+  );
+
+  const hospitalsForMap = React.useMemo(() => {
+    if (!selectedHospital) return filteredHospitals;
+    const idx = filteredHospitals.findIndex((x) => x.id === selectedHospital.id);
+    if (idx < 0) return filteredHospitals;
+    const h = filteredHospitals[idx];
+    if (h.lat === selectedHospital.lat && h.lng === selectedHospital.lng) return filteredHospitals;
+    const next = filteredHospitals.slice();
+    next[idx] = { ...h, lat: selectedHospital.lat, lng: selectedHospital.lng };
+    return next;
+  }, [filteredHospitals, selectedHospital]);
+
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader
         onOpenFilters={() => setFiltersOpenMobile(true)}
+        onCenterOnUser={handleCenterOnUser}
+        centerOnUserLoading={centerOnUserLoading}
         searchValue={searchValue}
         searchLoading={searchLoading}
+        searchError={searchError}
         searchResults={searchResults}
         onSearchChange={setSearchValue}
         onSelectSearchResult={handleSelectSearchResult}
+        onRetrySearch={() => setSearchNonce((n) => n + 1)}
       />
 
       <main className="mx-auto grid max-w-[1400px] gap-4 px-4 py-4 sm:grid-cols-[360px_1fr]">
@@ -230,7 +352,13 @@ export default function HomePage() {
                 {loading ? "Cargando…" : `${filteredHospitals.length} establecimientos`}
               </div>
               <div className="text-xs font-medium text-slate-500">
-                {error ? error : "Selecciona un marcador para ver el detalle."}
+                {error
+                  ? error
+                  : locationError
+                    ? locationError
+                    : searchError
+                      ? searchError
+                      : "Selecciona un marcador para ver el detalle."}
               </div>
             </div>
             <Legend />
@@ -238,32 +366,16 @@ export default function HomePage() {
 
           <div className="flex-1 min-h-[520px]">
             <HospitalMap
-              hospitals={filteredHospitals}
+              hospitals={hospitalsForMap}
               selectedHospitalId={selectedHospitalId}
+              loading={loading}
               userLocation={userLocation}
               route={route}
+              routeLoading={routeLoading}
               nearby={nearby}
+              nearbyLoading={nearbyLoading}
               focus={focus}
-              onSelectHospital={async (h) => {
-                setSelectedHospitalId(h.id);
-                setSelectedHospital(null);
-                setDetailOpen(true);
-                setDetailLoading(true);
-                setDetailError(null);
-                setRoute(null);
-                setRouteError(null);
-                setNearby(null);
-                setNearbyError(null);
-                setFocus({ lat: h.lat, lng: h.lng, zoom: 16 });
-                try {
-                  const full = await fetchHospitalById(h.id);
-                  setSelectedHospital(full);
-                } catch (e) {
-                  setDetailError(e instanceof Error ? e.message : "Error al cargar detalle");
-                } finally {
-                  setDetailLoading(false);
-                }
-              }}
+              onSelectHospital={handleSelectHospital}
             />
           </div>
         </div>
@@ -304,6 +416,7 @@ export default function HomePage() {
         error={detailError}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
+        route={route}
         routeLoading={routeLoading}
         routeError={routeError}
         nearbyLoading={nearbyLoading}

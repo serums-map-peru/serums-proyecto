@@ -34,11 +34,15 @@ Ejemplo:
 set NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api
 ```
 
+Notas:
+
+- Si cambias el `PORT` del backend, actualiza esta variable para apuntar a `/api`.
+
 ## Cómo se consulta la data
 
 La lista del mapa se obtiene desde:
 
-- `GET /hospitales` (con query params según filtros)
+- `GET /hospitales/map` (con query params según filtros)
 
 El panel lateral del seleccionado obtiene el detalle desde:
 
@@ -59,6 +63,7 @@ Además:
 ## Ejemplos
 
 ```bash
+curl "http://localhost:4000/api/hospitales/map?departamento=AMAZONAS&categoria=I-3"
 curl "http://localhost:4000/api/hospitales?departamento=AMAZONAS&categoria=I-3"
 curl "http://localhost:4000/api/hospitales/00005070"
 curl "http://localhost:4000/api/buscar?q=Lima"
