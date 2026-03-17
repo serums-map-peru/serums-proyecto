@@ -284,7 +284,7 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
   }, [loading, nearbyLoading, routeLoading]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+    <div className="relative h-full w-full overflow-hidden bg-white">
       {loadingLabel ? (
         <div className="pointer-events-none absolute left-3 top-3 z-[1200] rounded-2xl border border-[var(--border)] bg-white/95 px-3 py-2 text-xs font-extrabold text-slate-700 shadow-sm backdrop-blur">
           {loadingLabel}

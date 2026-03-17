@@ -38,15 +38,31 @@ function roundCoord(value) {
   return Math.round(value * 10_000) / 10_000;
 }
 
-function buildRouteCacheKey(latU, lonU, latH, lonH) {
-  return `${roundCoord(latU)},${roundCoord(lonU)}->${roundCoord(latH)},${roundCoord(lonH)}`;
+function parseProfile(value) {
+  if (typeof value !== "string") return "driving";
+  const v = value.trim().toLowerCase();
+  if (!v) return "driving";
+  if (v === "driving" || v === "car" || v === "carro") return "driving";
+  if (v === "walking" || v === "foot" || v === "pie") return "walking";
+  return null;
 }
 
-async function getRoute({ latUsuario, lonUsuario, latHospital, lonHospital }) {
+function buildRouteCacheKey(profile, latU, lonU, latH, lonH) {
+  return `${profile}:${roundCoord(latU)},${roundCoord(lonU)}->${roundCoord(latH)},${roundCoord(lonH)}`;
+}
+
+async function getRoute({ latUsuario, lonUsuario, latHospital, lonHospital, perfil, profile }) {
   const latU = parseNumber(latUsuario);
   const lonU = parseNumber(lonUsuario);
   const latH = parseNumber(latHospital);
   const lonH = parseNumber(lonHospital);
+
+  const resolvedProfile = parseProfile(profile ?? perfil);
+  if (!resolvedProfile) {
+    throw new HttpError(400, "Parámetro 'perfil' inválido", {
+      allowed: ["driving", "walking"],
+    });
+  }
 
   if (latU == null || lonU == null || latH == null || lonH == null) {
     throw new HttpError(400, "Parámetros de ruta inválidos", {
@@ -54,11 +70,11 @@ async function getRoute({ latUsuario, lonUsuario, latHospital, lonHospital }) {
     });
   }
 
-  const cacheKey = buildRouteCacheKey(latU, lonU, latH, lonH);
+  const cacheKey = buildRouteCacheKey(resolvedProfile, latU, lonU, latH, lonH);
   const cached = readCache(cacheKey);
   if (cached) return cached;
 
-  const url = `https://router.project-osrm.org/route/v1/driving/${lonU},${latU};${lonH},${latH}?overview=full&geometries=geojson`;
+  const url = `https://router.project-osrm.org/route/v1/${resolvedProfile}/${lonU},${latU};${lonH},${latH}?overview=full&geometries=geojson`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OSRM_TIMEOUT_MS);
   let res;

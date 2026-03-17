@@ -18,6 +18,7 @@ const listHospitalsMap = asyncHandler(async (req, res) => {
       provincia: h.provincia,
       distrito: h.distrito,
       grado_dificultad: h.grado_dificultad,
+      codigo_renipress_modular: h.codigo_renipress_modular,
       nombre_establecimiento: h.nombre_establecimiento,
       categoria: h.categoria,
       zaf: h.zaf,

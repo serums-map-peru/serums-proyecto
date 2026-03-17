@@ -2,7 +2,9 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { HttpError } = require("../utils/httpError");
-const { getEnvNumber } = require("../utils/env");
+const { getEnvNumber, getEnvString } = require("../utils/env");
+const { DB_ENABLED } = require("../db");
+const hospitalRepository = require("../db/hospitalRepository");
 const { searchPlacesPe } = require("./nominatimService");
 
 function cleanString(value) {
@@ -259,18 +261,108 @@ const GEOCODE_ENABLED = getEnvNumber("GEOCODE_ENABLED", 1) !== 0;
 const GEOCODE_INTERVAL_MS = getEnvNumber("GEOCODE_INTERVAL_MS", 1500);
 const GEOCODE_MAX_PER_BOOT = getEnvNumber("GEOCODE_MAX_PER_BOOT", 60);
 
+const COORD_OVERRIDES_ENABLED = getEnvNumber("COORD_OVERRIDES_ENABLED", 1) !== 0;
+const COORD_OVERRIDES_PATH = path.resolve(
+  getEnvString("COORD_OVERRIDES_PATH", path.resolve(__dirname, "../../../../hospital_coords_overrides.json")),
+);
+
 const geocodeQueue = [];
 const geocodeQueuedIds = new Set();
 const geocodeInFlight = new Set();
 let geocodeWorkerStarted = false;
 let geocodedCount = 0;
 
+let overridesCached = null;
+let overridesDbRevision = 0;
+
+function loadCoordOverrides() {
+  if (DB_ENABLED) {
+    if (overridesCached && overridesCached.dbRevision === overridesDbRevision) return overridesCached;
+    const byId = hospitalRepository.listCoordOverridesById();
+    overridesCached = { mtimeMs: null, dbRevision: overridesDbRevision, byId, path: null };
+    return overridesCached;
+  }
+
+  if (!COORD_OVERRIDES_ENABLED) {
+    overridesCached = { mtimeMs: null, byId: new Map(), path: COORD_OVERRIDES_PATH };
+    return overridesCached;
+  }
+
+  let stat;
+  try {
+    stat = fs.statSync(COORD_OVERRIDES_PATH);
+  } catch {
+    overridesCached = { mtimeMs: null, byId: new Map(), path: COORD_OVERRIDES_PATH };
+    return overridesCached;
+  }
+
+  if (overridesCached && overridesCached.mtimeMs === stat.mtimeMs) return overridesCached;
+
+  let parsed;
+  try {
+    const raw = fs.readFileSync(COORD_OVERRIDES_PATH, "utf8");
+    parsed = JSON.parse(raw);
+  } catch {
+    overridesCached = { mtimeMs: stat.mtimeMs, byId: new Map(), path: COORD_OVERRIDES_PATH };
+    return overridesCached;
+  }
+
+  const byId = new Map();
+  if (parsed && typeof parsed === "object") {
+    for (const [id, v] of Object.entries(parsed)) {
+      if (!id) continue;
+      if (!v || typeof v !== "object") continue;
+      const lat = Number(v.lat);
+      const lng = Number(v.lng);
+      const source = typeof v.source === "string" ? v.source : "OVERRIDE";
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      byId.set(String(id), { lat, lng, source, updatedAt: v.updatedAt });
+    }
+  }
+
+  overridesCached = { mtimeMs: stat.mtimeMs, byId, path: COORD_OVERRIDES_PATH };
+  return overridesCached;
+}
+
+function persistCoordOverride(id, { lat, lng, source }) {
+  if (!COORD_OVERRIDES_ENABLED) return;
+  if (!id) return;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+  if (DB_ENABLED) {
+    hospitalRepository.upsertCoordOverride(String(id), { lat, lng, source: source || "OVERRIDE" });
+    overridesDbRevision += 1;
+    overridesCached = null;
+    bumpDbHospitalsRevision();
+    return;
+  }
+
+  let existing = {};
+  try {
+    const raw = fs.readFileSync(COORD_OVERRIDES_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") existing = parsed;
+  } catch {
+  }
+
+  existing[String(id)] = {
+    lat,
+    lng,
+    source: source || "OVERRIDE",
+    updatedAt: new Date().toISOString(),
+  };
+
+  fs.writeFileSync(COORD_OVERRIDES_PATH, JSON.stringify(existing, null, 2));
+  overridesCached = null;
+}
+
 function enqueueGeocodeIfNeeded(h) {
   if (!GEOCODE_ENABLED) return;
   if (!h || !h.id) return;
   if (geocodedCount >= GEOCODE_MAX_PER_BOOT) return;
   if (geocodeQueuedIds.has(h.id)) return;
-  if (h.coordenadas_fuente !== "DEPARTAMENTO") return;
+  if (h.coordenadas_fuente === "RENIPRESS") return;
+  if (h.coordenadas_fuente === "NOMINATIM") return;
   if (!cleanString(h.nombre_establecimiento) || !cleanString(h.departamento) || !cleanString(h.provincia) || !cleanString(h.distrito))
     return;
   geocodeQueuedIds.add(h.id);
@@ -356,7 +448,6 @@ function bestNominatimMatch(results, hospital, deptCenter) {
 async function geocodeHospitalRecord(hospital) {
   if (!GEOCODE_ENABLED) return null;
   if (!hospital || !hospital.id) return null;
-  if (hospital.coordenadas_fuente && hospital.coordenadas_fuente !== "DEPARTAMENTO") return null;
 
   const deptCenter = getCoordsForDepartment(hospital.departamento);
 
@@ -378,6 +469,7 @@ async function geocodeHospitalRecord(hospital) {
       hospital.lat = match.lat;
       hospital.lng = match.lng;
       hospital.coordenadas_fuente = "NOMINATIM";
+      persistCoordOverride(hospital.id, { lat: match.lat, lng: match.lng, source: "NOMINATIM" });
       geocodedCount += 1;
       return match;
     }
@@ -622,6 +714,9 @@ function loadRenipressIndex() {
 }
 
 let cached = null;
+let dbHospitalsCache = null;
+let dbHospitalsRevision = 0;
+let dbSeedPromise = null;
 
 function loadHospitalsFromCsv() {
   const csvPath = getCsvPath();
@@ -678,6 +773,7 @@ function loadHospitalsFromCsv() {
   const records = [];
   const byId = new Map();
   const aggregations = new Map();
+  const identityToBaseId = new Map();
 
   const latIndex = headerIndex.has("lat") ? headerIndex.get("lat") : null;
   const lonIndex = headerIndex.has("lon")
@@ -705,18 +801,53 @@ function loadHospitalsFromCsv() {
 
     const codigo = padIpressCode(record.codigo_renipress_modular);
     record.codigo_renipress_modular = codigo;
-    const baseId =
+
+    const identityKey = [
+      normalize(record.nombre_establecimiento),
+      normalize(record.institucion),
+      normalize(record.departamento),
+      normalize(record.provincia),
+      normalize(record.distrito),
+    ].join("|");
+
+    const defaultId =
       codigo && codigo.length > 0
         ? codigo
-        : hashId(
-            JSON.stringify({
-              nombre_establecimiento: record.nombre_establecimiento,
-              institucion: record.institucion,
-              departamento: record.departamento,
-              provincia: record.provincia,
-              distrito: record.distrito,
-            }),
-          );
+        : hashId(identityKey);
+
+    const existingIdForIdentity = identityKey ? identityToBaseId.get(identityKey) : null;
+    let baseId = existingIdForIdentity || defaultId;
+
+    const shouldUpgradeToCodigo =
+      !!codigo &&
+      codigo.length > 0 &&
+      existingIdForIdentity &&
+      existingIdForIdentity !== codigo &&
+      /^[a-f0-9]{12}$/i.test(existingIdForIdentity);
+
+    if (shouldUpgradeToCodigo) {
+      const existingAgg = aggregations.get(existingIdForIdentity);
+      if (existingAgg) {
+        aggregations.delete(existingIdForIdentity);
+        baseId = codigo;
+        const merged = aggregations.get(baseId) || {
+          ...existingAgg,
+          id: baseId,
+          codigo_renipress_modular: codigo,
+          profesiones: Array.isArray(existingAgg.profesiones) ? existingAgg.profesiones.slice() : [],
+        };
+        if (!aggregations.has(baseId)) aggregations.set(baseId, merged);
+      } else {
+        baseId = codigo;
+      }
+    }
+
+    if (identityKey) {
+      const mapped = identityToBaseId.get(identityKey);
+      if (!mapped || mapped === baseId || (!/^[a-f0-9]{12}$/i.test(baseId) && /^[a-f0-9]{12}$/i.test(mapped))) {
+        identityToBaseId.set(identityKey, baseId);
+      }
+    }
 
     const renipress = codigo ? renipressStore.byCode.get(codigo) : null;
 
@@ -800,12 +931,20 @@ function loadHospitalsFromCsv() {
     }
   }
 
+  const overrides = loadCoordOverrides();
   for (const agg of aggregations.values()) {
     const profs = Array.isArray(agg.profesiones) ? agg.profesiones.filter(Boolean) : [];
     profs.sort((a, b) => a.localeCompare(b));
     agg.profesiones = profs;
     agg.profesion = profs.length > 0 ? profs[0] : cleanString(agg.profesion);
-    enqueueGeocodeIfNeeded(agg);
+    const override = overrides.byId.get(String(agg.id));
+    if (override && isWithinPeruBBox(override.lat, override.lng)) {
+      agg.lat = override.lat;
+      agg.lng = override.lng;
+      agg.coordenadas_fuente = override.source || "OVERRIDE";
+    } else {
+      enqueueGeocodeIfNeeded(agg);
+    }
     records.push(agg);
     byId.set(agg.id, agg);
   }
@@ -824,6 +963,80 @@ function loadHospitalsFromCsv() {
   return cached;
 }
 
+function bumpDbHospitalsRevision() {
+  dbHospitalsRevision += 1;
+  dbHospitalsCache = null;
+}
+
+function hospitalToDbRow(h) {
+  const profesiones = Array.isArray(h.profesiones) ? h.profesiones : [];
+  const imagenes = Array.isArray(h.imagenes) ? h.imagenes : [];
+  return {
+    id: String(h.id),
+    profesion: cleanString(h.profesion),
+    profesiones_json: JSON.stringify(profesiones),
+    institucion: cleanString(h.institucion),
+    departamento: cleanString(h.departamento),
+    provincia: cleanString(h.provincia),
+    distrito: cleanString(h.distrito),
+    grado_dificultad: cleanString(h.grado_dificultad),
+    codigo_renipress_modular: cleanString(h.codigo_renipress_modular),
+    nombre_establecimiento: cleanString(h.nombre_establecimiento),
+    presupuesto: cleanString(h.presupuesto),
+    categoria: cleanString(h.categoria),
+    zaf: cleanString(h.zaf),
+    ze: cleanString(h.ze),
+    imagenes_json: JSON.stringify(imagenes),
+    lat: Number.isFinite(Number(h.lat)) ? Number(h.lat) : null,
+    lng: Number.isFinite(Number(h.lng)) ? Number(h.lng) : null,
+    coordenadas_fuente: cleanString(h.coordenadas_fuente),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function importHospitalsToDb({ force } = {}) {
+  if (!DB_ENABLED) {
+    return { upserted: 0, csvPath: null, renipressPath: null, skipped: true };
+  }
+
+  const existingCount = hospitalRepository.countHospitals();
+  if (existingCount > 0 && !force) {
+    return { upserted: 0, csvPath: null, renipressPath: null, skipped: true };
+  }
+
+  const store = loadHospitalsFromCsv();
+  const rows = store.records.map(hospitalToDbRow);
+  hospitalRepository.upsertHospitals(rows);
+  bumpDbHospitalsRevision();
+
+  return {
+    upserted: rows.length,
+    csvPath: store.path,
+    renipressPath: store.renipressPath,
+    skipped: false,
+  };
+}
+
+async function ensureDbSeeded() {
+  if (!DB_ENABLED) return;
+  if (dbSeedPromise) return dbSeedPromise;
+  dbSeedPromise = (async () => {
+    const count = hospitalRepository.countHospitals();
+    if (count > 0) return;
+    await importHospitalsToDb({ force: true });
+  })();
+  return dbSeedPromise;
+}
+
+function loadHospitalsFromDb() {
+  if (dbHospitalsCache && dbHospitalsCache.revision === dbHospitalsRevision) return dbHospitalsCache;
+  const records = hospitalRepository.listHospitalsWithOverrides();
+  const byId = new Map();
+  for (const h of records) byId.set(String(h.id), h);
+  dbHospitalsCache = { revision: dbHospitalsRevision, records, byId };
+  return dbHospitalsCache;
+}
+
 function matchesFilter(fieldValue, filterValue) {
   if (!filterValue) return true;
   if (Array.isArray(fieldValue)) {
@@ -833,7 +1046,8 @@ function matchesFilter(fieldValue, filterValue) {
 }
 
 async function listHospitals(filters) {
-  const store = loadHospitalsFromCsv();
+  if (DB_ENABLED) await ensureDbSeeded();
+  const store = DB_ENABLED ? loadHospitalsFromDb() : loadHospitalsFromCsv();
 
   const profesion = cleanString(filters.profesion);
   const institucion = cleanString(filters.institucion);
@@ -860,19 +1074,41 @@ async function listHospitals(filters) {
 }
 
 async function getHospitalById(id) {
-  const store = loadHospitalsFromCsv();
+  if (DB_ENABLED) await ensureDbSeeded();
+  const store = DB_ENABLED ? loadHospitalsFromDb() : loadHospitalsFromCsv();
   const hospital = store.byId.get(String(id));
   if (!hospital) throw new HttpError(404, "Hospital no encontrado");
   return hospital;
 }
 
 async function geocodeHospitalById(id) {
+  if (DB_ENABLED) await ensureDbSeeded();
   const hospital = await getHospitalById(id);
   try {
     await geocodeHospitalRecord(hospital);
   } catch {
   }
+  if (DB_ENABLED) return await getHospitalById(id);
   return hospital;
 }
 
-module.exports = { listHospitals, getHospitalById, geocodeHospitalById };
+function __persistCoordOverrideForImport(id, { lat, lng, source }) {
+  if (!id) return;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  if (DB_ENABLED) {
+    hospitalRepository.upsertCoordOverride(String(id), { lat, lng, source: source || "OVERRIDE" });
+    overridesDbRevision += 1;
+    overridesCached = null;
+    bumpDbHospitalsRevision();
+    return;
+  }
+  persistCoordOverride(id, { lat, lng, source });
+}
+
+module.exports = {
+  listHospitals,
+  getHospitalById,
+  geocodeHospitalById,
+  importHospitalsToDb,
+  __persistCoordOverrideForImport,
+};

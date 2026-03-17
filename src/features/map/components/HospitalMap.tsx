@@ -9,7 +9,7 @@ export const HospitalMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-full w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+      <div className="h-full w-full overflow-hidden bg-white">
         <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-slate-500">
           Cargando mapa…
         </div>

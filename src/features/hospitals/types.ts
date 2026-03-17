@@ -28,6 +28,7 @@ export type HospitalMapItem = {
   provincia: string;
   distrito: string;
   grado_dificultad: string;
+  codigo_renipress_modular: string;
   nombre_establecimiento: string;
   categoria: string;
   zaf: string;
@@ -72,6 +73,13 @@ export type NearbyPlacesResponse = {
   farmacias: NearbyPlace[];
   tiendas: NearbyPlace[];
   comisarias: NearbyPlace[];
+};
+
+export type NearestAirportResponse = {
+  id: string;
+  aeropuerto: NearbyPlace | null;
+  distancia_meters: number | null;
+  radius_meters: number;
 };
 
 export type NominatimResult = {

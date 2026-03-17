@@ -106,6 +106,12 @@ const openapi = {
           { name: "lonUsuario", in: "query", required: true, schema: { type: "number" } },
           { name: "latHospital", in: "query", required: true, schema: { type: "number" } },
           { name: "lonHospital", in: "query", required: true, schema: { type: "number" } },
+          {
+            name: "perfil",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["driving", "walking"], default: "driving" },
+          },
         ],
         responses: {
           200: {
@@ -129,6 +135,21 @@ const openapi = {
             description: "Lugares cercanos agrupados",
             content: {
               "application/json": { schema: { $ref: "#/components/schemas/NearbyPlacesResponse" } },
+            },
+          },
+          404: { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+    "/aeropuerto-cercano/{id}": {
+      get: {
+        summary: "Obtener aeropuerto más cercano (Overpass) alrededor de un hospital",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          200: {
+            description: "Aeropuerto más cercano",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/NearestAirportResponse" } },
             },
           },
           404: { $ref: "#/components/responses/NotFound" },
@@ -205,6 +226,7 @@ const openapi = {
           provincia: { type: "string" },
           distrito: { type: "string" },
           grado_dificultad: { type: "string", example: "GD-5" },
+          codigo_renipress_modular: { type: "string", example: "00005070" },
           nombre_establecimiento: { type: "string" },
           categoria: { type: "string" },
           zaf: { type: "string", example: "SI" },
@@ -221,6 +243,7 @@ const openapi = {
           "provincia",
           "distrito",
           "grado_dificultad",
+          "codigo_renipress_modular",
           "nombre_establecimiento",
           "categoria",
           "zaf",
@@ -275,6 +298,16 @@ const openapi = {
           comisarias: { type: "array", items: { $ref: "#/components/schemas/NearbyPlace" } },
         },
         required: ["id", "hospedajes", "restaurantes", "farmacias", "tiendas", "comisarias"],
+      },
+      NearestAirportResponse: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          aeropuerto: { $ref: "#/components/schemas/NearbyPlace", nullable: true },
+          distancia_meters: { type: "number", nullable: true, example: 12345.6 },
+          radius_meters: { type: "number", example: 80000 },
+        },
+        required: ["id", "aeropuerto", "distancia_meters", "radius_meters"],
       },
       NominatimResult: {
         type: "object",
