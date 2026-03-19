@@ -19,6 +19,8 @@ export function createInitialHospitalFilters(): HospitalFilters {
     categoria: null,
     zaf: null,
     ze: null,
+    serums_periodo: null,
+    serums_modalidad: null,
   };
 }
 
@@ -41,6 +43,8 @@ function buildHospitalQuery(filters: HospitalFilters) {
     ["categoria", filters.categoria ?? ""],
     ["zaf", filters.zaf ?? ""],
     ["ze", filters.ze ?? ""],
+    ["serums_periodo", filters.serums_periodo ?? ""],
+    ["serums_modalidad", filters.serums_modalidad ?? ""],
   ];
 
   for (const [k, v] of entries) {

@@ -33,6 +33,10 @@ function getVerificationSecret() {
   return getJwtSecret();
 }
 
+function isEmailVerificationEnabled() {
+  return getEnvNumber("EMAIL_VERIFICATION_ENABLED", 1) !== 0;
+}
+
 function signToken(user) {
   const secret = getJwtSecret();
   const payload = { sub: user.id, email: user.email };
@@ -75,6 +79,12 @@ async function register({ email, password, name }) {
   const created = userRepository.createUser({ email: e, password_hash, name: n || null });
   if (!created) throw new HttpError(500, "No se pudo crear el usuario");
 
+  if (!isEmailVerificationEnabled()) {
+    userRepository.markEmailVerified(created.id);
+    const token = signToken({ id: created.id, email: created.email });
+    return { token, user: { id: created.id, email: created.email, name: created.name, email_verified: true } };
+  }
+
   const codeLength = getEnvNumber("EMAIL_VERIFICATION_CODE_LENGTH", 6);
   const ttlMinutes = getEnvNumber("EMAIL_VERIFICATION_TTL_MINUTES", 10);
   const code = generateNumericCode(codeLength);
@@ -100,7 +110,9 @@ async function login({ email, password }) {
 
   const found = userRepository.findUserByEmail(e);
   if (!found || !found.password_hash) throw new HttpError(401, "Credenciales inválidas");
-  if (!found.email_verified) throw new HttpError(403, "Debes verificar tu correo antes de iniciar sesión");
+  if (isEmailVerificationEnabled() && !found.email_verified) {
+    throw new HttpError(403, "Debes verificar tu correo antes de iniciar sesión");
+  }
 
   const ok = await bcrypt.compare(p, found.password_hash);
   if (!ok) throw new HttpError(401, "Credenciales inválidas");
@@ -118,6 +130,13 @@ async function verifyEmail({ email, code }) {
 
   const user = userRepository.findUserByEmail(e);
   if (!user) throw new HttpError(400, "Código inválido");
+
+  if (!isEmailVerificationEnabled()) {
+    if (!user.email_verified) userRepository.markEmailVerified(user.id);
+    const token = signToken(user);
+    return { token, user: { id: user.id, email: user.email, name: user.name, email_verified: true } };
+  }
+
   if (user.email_verified) {
     const token = signToken(user);
     return { token, user: { id: user.id, email: user.email, name: user.name, email_verified: true } };
@@ -149,6 +168,7 @@ async function verifyEmail({ email, code }) {
 async function resendVerification({ email }) {
   const e = cleanEmail(email);
   if (!isValidEmailFormat(e)) throw new HttpError(400, "Email inválido");
+  if (!isEmailVerificationEnabled()) return { sent: true };
 
   const user = userRepository.findUserByEmail(e);
   if (!user) return { sent: true };

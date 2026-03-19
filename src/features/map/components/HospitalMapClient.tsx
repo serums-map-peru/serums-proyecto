@@ -1,7 +1,7 @@
 "use client";
 import L from "leaflet";
 import * as React from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
+import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 
 import { HospitalMapItem, NearbyPlacesResponse, RouteResponse } from "@/features/hospitals/types";
 
@@ -12,13 +12,19 @@ export type HospitalMapProps = {
   selectedHospitalId: string | null;
   onSelectHospital: (hospital: HospitalMapItem) => void;
   loading?: boolean;
-  userLocation: { lat: number; lng: number } | null;
+  userLocation: { lat: number; lng: number; accuracy?: number | null } | null;
   route: RouteResponse | null;
   routeLoading?: boolean;
   nearby: NearbyPlacesResponse | null;
   nearbyLoading?: boolean;
   focus: { lat: number; lng: number; zoom?: number } | null;
 };
+
+function formatAccuracy(meters: number) {
+  if (!Number.isFinite(meters)) return "—";
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
 
 function categoriaColor(categoria: string) {
   switch (categoria) {
@@ -283,11 +289,21 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
     return parts.length > 0 ? parts.join(" · ") : null;
   }, [loading, nearbyLoading, routeLoading]);
 
+  const accuracyMeters =
+    userLocation && typeof userLocation.accuracy === "number" && Number.isFinite(userLocation.accuracy)
+      ? Math.max(10, Math.min(20000, userLocation.accuracy))
+      : null;
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-white">
       {loadingLabel ? (
         <div className="pointer-events-none absolute left-3 top-3 z-[1200] rounded-2xl border border-[var(--border)] bg-white/95 px-3 py-2 text-xs font-extrabold text-slate-700 shadow-sm backdrop-blur">
           {loadingLabel}
+        </div>
+      ) : null}
+      {userLocation && accuracyMeters != null ? (
+        <div className="pointer-events-none absolute left-3 top-14 z-[1200] rounded-2xl border border-[var(--border)] bg-white/95 px-3 py-2 text-xs font-extrabold text-slate-700 shadow-sm backdrop-blur">
+          Precisión aprox: {formatAccuracy(accuracyMeters)}
         </div>
       ) : null}
       <MapContainer
@@ -306,7 +322,18 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
         <FocusController focus={focus} />
         <RouteFitController routeLatLngs={routeLatLngs} />
 
-        {userLocation ? <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon} /> : null}
+        {userLocation ? (
+          <>
+            <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon} />
+            {accuracyMeters != null ? (
+              <Circle
+                center={[userLocation.lat, userLocation.lng]}
+                radius={accuracyMeters}
+                pathOptions={{ color: "#0ea5e9", weight: 2, opacity: 0.5, fillColor: "#0ea5e9", fillOpacity: 0.12 }}
+              />
+            ) : null}
+          </>
+        ) : null}
 
         {routeLatLngs ? (
           <Polyline positions={routeLatLngs} pathOptions={{ color: "#0ea5e9", weight: 5, opacity: 0.9 }} />

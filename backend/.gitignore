@@ -7,3 +7,5 @@ yarn-error.log*
 src/data/*.sqlite
 src/data/*.sqlite-*
 src/data/*.db
+src/data/*.db-*
+!src/data/serums.db

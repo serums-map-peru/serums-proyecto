@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "import:db": "node src/scripts/importHospitalsToDb.js"
+    "import:db": "node src/scripts/importHospitalsToDb.js",
+    "import:offers": "node src/scripts/importSerumsOffersToDb.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

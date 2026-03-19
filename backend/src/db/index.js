@@ -4,9 +4,21 @@ const path = require("path");
 const { getEnvNumber, getEnvString } = require("../utils/env");
 
 const DB_ENABLED = getEnvNumber("DB_ENABLED", 1) !== 0;
-const DB_PATH = path.resolve(getEnvString("DB_PATH", path.resolve(__dirname, "../data/serums.sqlite")));
+const DB_PATH = path.resolve(getEnvString("DB_PATH", path.resolve(__dirname, "../data/serums.db")));
+const DB_JOURNAL_MODE = getEnvString("DB_JOURNAL_MODE", "DELETE");
 
 let dbInstance = null;
+
+function ensureDbFileExists() {
+  if (!DB_ENABLED) return;
+  if (fs.existsSync(DB_PATH)) return;
+
+  const seedPath = path.resolve(__dirname, "../data/serums.db");
+  if (!fs.existsSync(seedPath)) return;
+
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  fs.copyFileSync(seedPath, DB_PATH);
+}
 
 function columnExists(db, table, column) {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all();
@@ -70,6 +82,20 @@ function initSchema(db) {
       updated_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS serums_offers (
+      hospital_id TEXT NOT NULL,
+      codigo_renipress_modular TEXT,
+      periodo TEXT NOT NULL,
+      modalidad TEXT NOT NULL,
+      profesion TEXT NOT NULL,
+      plazas INTEGER NOT NULL DEFAULT 0,
+      sede_adjudicacion TEXT,
+      created_at TEXT,
+      updated_at TEXT,
+      PRIMARY KEY (hospital_id, periodo, modalidad, profesion),
+      FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_hospitals_departamento ON hospitals(departamento);
     CREATE INDEX IF NOT EXISTS idx_hospitals_provincia ON hospitals(provincia);
     CREATE INDEX IF NOT EXISTS idx_hospitals_distrito ON hospitals(distrito);
@@ -77,6 +103,10 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_hospitals_categoria ON hospitals(categoria);
     CREATE INDEX IF NOT EXISTS idx_hospitals_grado ON hospitals(grado_dificultad);
     CREATE INDEX IF NOT EXISTS idx_email_verifications_expires ON email_verifications(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_serums_offers_periodo ON serums_offers(periodo);
+    CREATE INDEX IF NOT EXISTS idx_serums_offers_modalidad ON serums_offers(modalidad);
+    CREATE INDEX IF NOT EXISTS idx_serums_offers_profesion ON serums_offers(profesion);
+    CREATE INDEX IF NOT EXISTS idx_serums_offers_codigo ON serums_offers(codigo_renipress_modular);
   `);
 
   ensureColumn(db, "users", "email_verified INTEGER NOT NULL DEFAULT 0", "email_verified");
@@ -88,10 +118,11 @@ function getDb() {
   if (dbInstance) return dbInstance;
 
   const Database = require("better-sqlite3");
+  ensureDbFileExists();
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
   const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
+  db.pragma(`journal_mode = ${DB_JOURNAL_MODE}`);
   db.pragma("foreign_keys = ON");
 
   initSchema(db);

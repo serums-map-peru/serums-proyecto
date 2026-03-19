@@ -3,8 +3,9 @@ const path = require("path");
 const crypto = require("crypto");
 const { HttpError } = require("../utils/httpError");
 const { getEnvNumber, getEnvString } = require("../utils/env");
-const { DB_ENABLED } = require("../db");
+const { DB_ENABLED, DB_PATH } = require("../db");
 const hospitalRepository = require("../db/hospitalRepository");
+const serumsOfferRepository = require("../db/serumsOfferRepository");
 const { searchPlacesPe } = require("./nominatimService");
 
 function cleanString(value) {
@@ -1023,7 +1024,9 @@ async function ensureDbSeeded() {
   dbSeedPromise = (async () => {
     const count = hospitalRepository.countHospitals();
     if (count > 0) return;
-    await importHospitalsToDb({ force: true });
+    throw new HttpError(500, "Base de datos vacía. Falta poblar serums.db antes de usar el backend.", {
+      DB_PATH,
+    });
   })();
   return dbSeedPromise;
 }
@@ -1045,6 +1048,30 @@ function matchesFilter(fieldValue, filterValue) {
   return normalize(fieldValue) === normalize(filterValue);
 }
 
+function summarizeOffers(offers) {
+  const items = Array.isArray(offers) ? offers : [];
+  const byKey = new Map();
+  for (const o of items) {
+    if (!o || typeof o !== "object") continue;
+    const periodo = typeof o.periodo === "string" ? o.periodo : "";
+    const modalidad = typeof o.modalidad === "string" ? o.modalidad : "";
+    const plazas = typeof o.plazas === "number" ? o.plazas : Number(o.plazas) || 0;
+    if (!periodo || !modalidad) continue;
+    const key = `${periodo}::${modalidad}`;
+    byKey.set(key, (byKey.get(key) || 0) + plazas);
+  }
+  return Array.from(byKey.entries())
+    .map(([key, plazas_total]) => {
+      const [periodo, modalidad] = key.split("::");
+      return { periodo, modalidad, plazas_total };
+    })
+    .sort((a, b) => {
+      const p = String(b.periodo).localeCompare(String(a.periodo));
+      if (p !== 0) return p;
+      return String(a.modalidad).localeCompare(String(b.modalidad));
+    });
+}
+
 async function listHospitals(filters) {
   if (DB_ENABLED) await ensureDbSeeded();
   const store = DB_ENABLED ? loadHospitalsFromDb() : loadHospitalsFromCsv();
@@ -1058,8 +1085,10 @@ async function listHospitals(filters) {
   const categoria = cleanString(filters.categoria);
   const zaf = cleanString(filters.zaf);
   const ze = cleanString(filters.ze);
+  const serums_periodo = cleanString(filters.serums_periodo);
+  const serums_modalidad = cleanString(filters.serums_modalidad);
 
-  return store.records.filter((h) => {
+  const base = store.records.filter((h) => {
     if (!matchesFilter(h.profesion, profesion)) return false;
     if (!matchesFilter(h.institucion, institucion)) return false;
     if (!matchesFilter(h.departamento, departamento)) return false;
@@ -1071,6 +1100,19 @@ async function listHospitals(filters) {
     if (!matchesFilter(h.ze, ze)) return false;
     return true;
   });
+
+  const requiresOfferFilter = !!serums_periodo || !!serums_modalidad;
+  if (!requiresOfferFilter) return base;
+  if (!DB_ENABLED) return [];
+
+  const ids = base.map((h) => String(h.id)).filter(Boolean);
+  const summary = serumsOfferRepository.listOfferSummaryByHospitalIds(ids, {
+    periodo: serums_periodo || null,
+    modalidad: serums_modalidad || null,
+    profesion: profesion || null,
+  });
+  const allowed = new Set(summary.map((r) => String(r.hospital_id)));
+  return base.filter((h) => allowed.has(String(h.id)));
 }
 
 async function getHospitalById(id) {
@@ -1078,7 +1120,11 @@ async function getHospitalById(id) {
   const store = DB_ENABLED ? loadHospitalsFromDb() : loadHospitalsFromCsv();
   const hospital = store.byId.get(String(id));
   if (!hospital) throw new HttpError(404, "Hospital no encontrado");
-  return hospital;
+  if (!DB_ENABLED) return hospital;
+
+  const offers = serumsOfferRepository.listOffersByHospitalId(hospital.id);
+  const resumen = summarizeOffers(offers);
+  return { ...hospital, serums_ofertas: offers, serums_resumen: resumen };
 }
 
 async function geocodeHospitalById(id) {

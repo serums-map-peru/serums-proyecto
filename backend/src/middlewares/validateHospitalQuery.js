@@ -19,6 +19,8 @@ function validateHospitalQuery(req, res, next) {
       categoria,
       zaf,
       ze,
+      serums_periodo,
+      serums_modalidad,
     } = req.query;
 
     validateStringParam(profesion, "profesion");
@@ -30,6 +32,8 @@ function validateHospitalQuery(req, res, next) {
     validateStringParam(categoria, "categoria");
     validateStringParam(zaf, "zaf");
     validateStringParam(ze, "ze");
+    validateStringParam(serums_periodo, "serums_periodo");
+    validateStringParam(serums_modalidad, "serums_modalidad");
 
     next();
   } catch (err) {

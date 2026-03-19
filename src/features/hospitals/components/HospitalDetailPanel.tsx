@@ -187,8 +187,8 @@ export function HospitalDetailPanel({
               {error}
             </div>
           ) : hospital ? (
-            <div className="flex h-full flex-col">
-              <div className="flex-1 overflow-auto px-4 py-4">
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex-1 min-h-0 overflow-auto px-4 py-4">
                 <div className="grid gap-3">
                   <div className="rounded-3xl border border-[var(--border)] bg-white px-4 py-3">
                     <div className="text-xs font-semibold text-slate-500">Destino</div>
@@ -406,6 +406,21 @@ export function HospitalDetailPanel({
                           <Field label="ZE" value={hospital.ze || "—"} />
                           <Field label="Código RENIPRESS modular" value={hospital.codigo_renipress_modular || "—"} />
                           <Field label="Coordenadas" value={`${hospital.lat.toFixed(6)}, ${hospital.lng.toFixed(6)}`} />
+                          {hospital.serums_resumen && hospital.serums_resumen.length > 0 ? (
+                            <div className="sm:col-span-2 rounded-2xl border border-[var(--border)] bg-white px-4 py-3">
+                              <div className="text-xs font-semibold text-slate-500">Plazas SERUMS</div>
+                              <div className="mt-2 grid gap-1">
+                                {hospital.serums_resumen.map((r) => (
+                                  <div key={`${r.periodo}-${r.modalidad}`} className="flex items-center justify-between gap-3">
+                                    <div className="text-sm font-semibold text-slate-700">
+                                      {r.periodo} · {r.modalidad.charAt(0).toUpperCase() + r.modalidad.slice(1)}
+                                    </div>
+                                    <div className="text-sm font-extrabold text-slate-900">{r.plazas_total}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="sm:col-span-2">
                             <Button
                               variant="secondary"

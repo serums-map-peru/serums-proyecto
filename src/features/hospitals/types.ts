@@ -17,6 +17,25 @@ export type Hospital = {
   lng: number;
   imagenes?: string[];
   coordenadas_fuente?: string;
+  serums_ofertas?: SerumsOffer[];
+  serums_resumen?: SerumsOfferSummary[];
+};
+
+export type SerumsOffer = {
+  hospital_id: string;
+  codigo_renipress_modular: string;
+  periodo: string;
+  modalidad: string;
+  profesion: string;
+  plazas: number;
+  sede_adjudicacion: string;
+  updated_at?: string | null;
+};
+
+export type SerumsOfferSummary = {
+  periodo: string;
+  modalidad: string;
+  plazas_total: number;
 };
 
 export type HospitalMapItem = {
@@ -47,6 +66,8 @@ export type HospitalFilters = {
   categoria: string | null;
   zaf: string | null;
   ze: string | null;
+  serums_periodo: string | null;
+  serums_modalidad: string | null;
 };
 
 export type RouteResponse = {

@@ -120,7 +120,9 @@ export default function HomePage() {
   const [detailError, setDetailError] = React.useState<string | null>(null);
   const [detailOpen, setDetailOpen] = React.useState(false);
 
-  const [userLocation, setUserLocation] = React.useState<{ lat: number; lng: number } | null>(null);
+  const [userLocation, setUserLocation] = React.useState<{ lat: number; lng: number; accuracy?: number | null } | null>(
+    null,
+  );
   const [travelMode, setTravelMode] = React.useState<"carro" | "pie" | "avion">("carro");
   const [activeTrip, setActiveTrip] = React.useState<{
     hospitalId: string;
@@ -300,12 +302,57 @@ export default function HomePage() {
   }, []);
 
   const requestGeolocation = React.useCallback(() => {
-    return new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+    return new Promise<{ lat: number; lng: number; accuracy?: number | null }>((resolve, reject) => {
       if (!navigator.geolocation) return reject(new Error("Geolocalización no disponible"));
-      navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => reject(err),
-        { enableHighAccuracy: true, timeout: 12000, maximumAge: 2000 },
+
+      let done = false;
+      let watchId: number | null = null;
+      let best: { lat: number; lng: number; accuracy?: number | null } | null = null;
+
+      const finishOk = (value: { lat: number; lng: number; accuracy?: number | null }) => {
+        if (done) return;
+        done = true;
+        if (watchId != null) navigator.geolocation.clearWatch(watchId);
+        resolve(value);
+      };
+
+      const finishErr = (err: unknown) => {
+        if (done) return;
+        done = true;
+        if (watchId != null) navigator.geolocation.clearWatch(watchId);
+        reject(err);
+      };
+
+      const t = window.setTimeout(() => {
+        if (best) finishOk(best);
+        else finishErr(new Error("Tiempo de espera agotado al obtener la ubicación."));
+      }, 8000);
+
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const accuracy = typeof pos.coords.accuracy === "number" ? pos.coords.accuracy : null;
+          const next = { lat, lng, accuracy };
+          if (!best) {
+            best = next;
+          } else {
+            const bestAcc = typeof best.accuracy === "number" ? best.accuracy : Number.POSITIVE_INFINITY;
+            const nextAcc = typeof accuracy === "number" ? accuracy : Number.POSITIVE_INFINITY;
+            if (nextAcc < bestAcc) best = next;
+          }
+          const bestAcc = typeof best.accuracy === "number" ? best.accuracy : null;
+          if (bestAcc != null && bestAcc <= 40) {
+            window.clearTimeout(t);
+            finishOk(best);
+          }
+        },
+        (err) => {
+          window.clearTimeout(t);
+          if (best) finishOk(best);
+          else finishErr(err);
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
       );
     });
   }, []);

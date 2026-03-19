@@ -27,7 +27,7 @@ export type FiltersBarProps = {
   results: HospitalMapItem[];
   selectedHospitalId: string | null;
   onSelectHospital: (hospital: HospitalMapItem) => void;
-  userLocation: { lat: number; lng: number } | null;
+  userLocation: { lat: number; lng: number; accuracy?: number | null } | null;
   onCloseMobile?: () => void;
 };
 
@@ -88,6 +88,11 @@ export function FiltersBar({
 }: FiltersBarProps) {
   const [locationOpen, setLocationOpen] = React.useState(false);
   const [dataOpen, setDataOpen] = React.useState(false);
+  const serumsPeriodos = ["2025-I", "2025-II"];
+  const serumsModalidades = [
+    { value: "remunerado", label: "Remunerado" },
+    { value: "equivalente", label: "Equivalente" },
+  ];
 
   return (
     <Card className="h-full w-full overflow-hidden bg-sky-50">
@@ -179,7 +184,9 @@ export function FiltersBar({
                   filters.grado_dificultad ||
                   filters.categoria ||
                   filters.zaf ||
-                  filters.ze
+                  filters.ze ||
+                  filters.serums_periodo ||
+                  filters.serums_modalidad
                     ? "Filtrando"
                     : "Sin filtros"}
                 </div>
@@ -190,6 +197,22 @@ export function FiltersBar({
             </button>
             {dataOpen ? (
               <div className="grid gap-3">
+                <SearchableSelect
+                  label="Periodo SERUMS"
+                  value={filters.serums_periodo}
+                  options={serumsPeriodos.map((r) => ({ value: r, label: r }))}
+                  onChange={(serums_periodo) => setFilters((p) => ({ ...p, serums_periodo }))}
+                  placeholder="Todos"
+                  searchPlaceholder="Buscar periodo…"
+                />
+                <SearchableSelect
+                  label="Modalidad"
+                  value={filters.serums_modalidad}
+                  options={serumsModalidades}
+                  onChange={(serums_modalidad) => setFilters((p) => ({ ...p, serums_modalidad }))}
+                  placeholder="Todas"
+                  searchPlaceholder="Buscar modalidad…"
+                />
                 <SearchableSelect
                   label="Profesión"
                   value={filters.profesion}

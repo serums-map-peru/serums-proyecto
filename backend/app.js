@@ -60,6 +60,16 @@ function createApp() {
   app.use(express.json({ limit: getEnvString("JSON_BODY_LIMIT", "1mb") }));
   app.use(logger);
 
+  const authWindowMs = getEnvNumber("AUTH_RATE_LIMIT_WINDOW_MS", 60_000);
+  const authMax = getEnvNumber("AUTH_RATE_LIMIT_MAX", 30);
+  app.use(
+    createSimpleRateLimiter({
+      windowMs: authWindowMs,
+      max: authMax,
+      match: (req) => typeof req.path === "string" && req.path.startsWith("/api/auth/"),
+    }),
+  );
+
   const osmWindowMs = getEnvNumber("OSM_RATE_LIMIT_WINDOW_MS", 60_000);
   const osmMax = getEnvNumber("OSM_RATE_LIMIT_MAX", 40);
   app.use(
