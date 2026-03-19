@@ -20,6 +20,21 @@ function ensureDbFileExists() {
   fs.copyFileSync(seedPath, DB_PATH);
 }
 
+function canSafelySeedFromBundledDb(db) {
+  if (!DB_ENABLED) return false;
+  const seedPath = path.resolve(__dirname, "../data/serums.db");
+  if (!fs.existsSync(seedPath)) return false;
+  if (path.resolve(seedPath) === path.resolve(DB_PATH)) return false;
+
+  const count = (table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n ?? 0;
+  const hospitals = count("hospitals");
+  const offers = count("serums_offers");
+  const overrides = count("hospital_coord_overrides");
+  const users = count("users");
+
+  return hospitals === 0 && offers === 0 && overrides === 0 && users === 0;
+}
+
 function columnExists(db, table, column) {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all();
   return rows.some((r) => String(r.name) === column);
@@ -121,13 +136,24 @@ function getDb() {
   ensureDbFileExists();
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
-  const db = new Database(DB_PATH);
-  db.pragma(`journal_mode = ${DB_JOURNAL_MODE}`);
-  db.pragma("foreign_keys = ON");
+  const open = () => {
+    const db = new Database(DB_PATH);
+    db.pragma(`journal_mode = ${DB_JOURNAL_MODE}`);
+    db.pragma("foreign_keys = ON");
+    initSchema(db);
+    return db;
+  };
 
-  initSchema(db);
+  let db = open();
+  if (canSafelySeedFromBundledDb(db)) {
+    db.close();
+    const seedPath = path.resolve(__dirname, "../data/serums.db");
+    fs.copyFileSync(seedPath, DB_PATH);
+    db = open();
+  }
+
   dbInstance = db;
-  return dbInstance;
+  return db;
 }
 
 module.exports = { getDb, DB_ENABLED, DB_PATH };
