@@ -84,6 +84,14 @@ function createApp() {
     }),
   );
 
+  app.get("/", (req, res) => {
+    res.status(200).json({
+      ok: true,
+      service: "SERUMS Map Perú API",
+      routes: { health: "/api/health", docs: "/api/docs" },
+    });
+  });
+
   app.use("/api", apiRouter);
 
   app.use(notFound);
