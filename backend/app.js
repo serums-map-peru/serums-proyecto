@@ -66,7 +66,8 @@ function createApp() {
     createSimpleRateLimiter({
       windowMs: authWindowMs,
       max: authMax,
-      match: (req) => typeof req.path === "string" && req.path.startsWith("/api/auth/"),
+      match: (req) =>
+        typeof req.path === "string" && (req.path.startsWith("/api/auth/") || req.path.startsWith("/auth/")),
     }),
   );
 
@@ -80,7 +81,10 @@ function createApp() {
         typeof req.path === "string" &&
         (req.path.startsWith("/api/buscar") ||
           req.path.startsWith("/api/ruta") ||
-          req.path.startsWith("/api/lugares-cercanos")),
+          req.path.startsWith("/api/lugares-cercanos") ||
+          req.path.startsWith("/buscar") ||
+          req.path.startsWith("/ruta") ||
+          req.path.startsWith("/lugares-cercanos")),
     }),
   );
 
@@ -88,11 +92,12 @@ function createApp() {
     res.status(200).json({
       ok: true,
       service: "SERUMS Map Perú API",
-      routes: { health: "/api/health", docs: "/api/docs" },
+      routes: { health: "/health (o /api/health)", docs: "/docs (o /api/docs)" },
     });
   });
 
   app.use("/api", apiRouter);
+  app.use(apiRouter);
 
   app.use(notFound);
   app.use(errorHandler);
