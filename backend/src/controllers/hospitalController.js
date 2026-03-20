@@ -8,24 +8,39 @@ const listHospitals = asyncHandler(async (req, res) => {
 
 const listHospitalsMap = asyncHandler(async (req, res) => {
   const hospitals = await hospitalService.listHospitals(req.query);
+  const toFiniteNumberOrNull = (value) => {
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    if (typeof value === "string") {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
   res.json(
-    hospitals.map((h) => ({
-      id: h.id,
-      profesion: h.profesion,
-      profesiones: h.profesiones,
-      institucion: h.institucion,
-      departamento: h.departamento,
-      provincia: h.provincia,
-      distrito: h.distrito,
-      grado_dificultad: h.grado_dificultad,
-      codigo_renipress_modular: h.codigo_renipress_modular,
-      nombre_establecimiento: h.nombre_establecimiento,
-      categoria: h.categoria,
-      zaf: h.zaf,
-      ze: h.ze,
-      lat: h.lat,
-      lng: h.lng,
-    })),
+    hospitals
+      .map((h) => {
+        const lat = toFiniteNumberOrNull(h.lat);
+        const lng = toFiniteNumberOrNull(h.lng);
+        if (lat == null || lng == null) return null;
+        return {
+          id: h.id,
+          profesion: h.profesion,
+          profesiones: h.profesiones,
+          institucion: h.institucion,
+          departamento: h.departamento,
+          provincia: h.provincia,
+          distrito: h.distrito,
+          grado_dificultad: h.grado_dificultad,
+          codigo_renipress_modular: h.codigo_renipress_modular,
+          nombre_establecimiento: h.nombre_establecimiento,
+          categoria: h.categoria,
+          zaf: h.zaf,
+          ze: h.ze,
+          lat,
+          lng,
+        };
+      })
+      .filter(Boolean),
   );
 });
 
