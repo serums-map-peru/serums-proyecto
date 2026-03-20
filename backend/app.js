@@ -7,12 +7,23 @@ const { notFound } = require("./src/middlewares/notFound");
 const { errorHandler } = require("./src/middlewares/errorHandler");
 const { apiRouter } = require("./src/routes");
 
+function normalizeOrigin(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    return u.origin;
+  } catch {
+    return raw.replace(/\/$/, "");
+  }
+}
+
 function parseAllowedOrigins(value) {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw || raw === "*") return { any: true, list: [] };
   const list = raw
     .split(",")
-    .map((s) => s.trim())
+    .map((s) => normalizeOrigin(s))
     .filter(Boolean);
   return { any: false, list };
 }
@@ -52,7 +63,8 @@ function createApp() {
       origin: (origin, cb) => {
         if (allowed.any) return cb(null, true);
         if (!origin) return cb(null, true);
-        return cb(null, allowed.list.includes(origin));
+        const normalized = normalizeOrigin(origin);
+        return cb(null, allowed.list.includes(normalized));
       },
     }),
   );
