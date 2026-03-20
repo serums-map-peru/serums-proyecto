@@ -136,8 +136,8 @@ function readOffersCsv(csvPath) {
   return { path: csvPath, rows };
 }
 
-function buildHospitalCodeToId() {
-  const indexRows = serumsOfferRepository.listHospitalRenipressIndex();
+async function buildHospitalCodeToId() {
+  const indexRows = await serumsOfferRepository.listHospitalRenipressIndex();
   const map = new Map();
   for (const r of indexRows) {
     const code = padIpressCode(r.codigo_renipress_modular);
@@ -147,7 +147,7 @@ function buildHospitalCodeToId() {
   return map;
 }
 
-function importOffersFromCsv({ csvPath, periodo, modalidad }) {
+async function importOffersFromCsv({ csvPath, periodo, modalidad }) {
   const { path: resolvedPath, rows } = readOffersCsv(csvPath);
   if (!resolvedPath) return { imported: 0, skipped: 0, missingHospitals: 0, path: null, skippedFile: true };
   if (!rows.length) return { imported: 0, skipped: 0, missingHospitals: 0, path: resolvedPath, skippedFile: true };
@@ -175,9 +175,9 @@ function importOffersFromCsv({ csvPath, periodo, modalidad }) {
   );
   const idxSede = headerIndex.get("sededeadjudicacion") ?? headerIndex.get("sededeadjudicacin");
 
-  const codeToId = buildHospitalCodeToId();
+  const codeToId = await buildHospitalCodeToId();
 
-  serumsOfferRepository.deleteOffersByPeriodoModalidad(periodo, modalidad);
+  await serumsOfferRepository.deleteOffersByPeriodoModalidad(periodo, modalidad);
 
   let imported = 0;
   let skipped = 0;
@@ -217,13 +217,13 @@ function importOffersFromCsv({ csvPath, periodo, modalidad }) {
     imported += 1;
   }
 
-  if (records.length > 0) serumsOfferRepository.upsertOffers(records);
+  if (records.length > 0) await serumsOfferRepository.upsertOffers(records);
   return { imported, skipped, missingHospitals, path: resolvedPath, skippedFile: false };
 }
 
 async function ensureHospitalsSeeded() {
   if (!DB_ENABLED) return;
-  const count = hospitalRepository.countHospitals();
+  const count = await hospitalRepository.countHospitals();
   if (count > 0) return;
   await hospitalService.importHospitalsToDb({ force: true });
 }
@@ -266,7 +266,7 @@ async function main() {
   for (const s of sources) {
     const configured = getEnvString(s.pathKey, "");
     const csvPath = configured && configured.trim().length > 0 ? path.resolve(configured.trim()) : s.defaultPath;
-    const result = importOffersFromCsv({ csvPath, periodo: s.periodo, modalidad: s.modalidad });
+    const result = await importOffersFromCsv({ csvPath, periodo: s.periodo, modalidad: s.modalidad });
     const displayedPath = result.path || csvPath;
     process.stdout.write(
       `Plazas ${s.periodo} ${s.modalidad}: importadas=${result.imported}, omitidas=${result.skipped}, sin_hospital=${result.missingHospitals}, path=${displayedPath}\n`,

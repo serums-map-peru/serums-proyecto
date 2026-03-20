@@ -276,10 +276,10 @@ let geocodedCount = 0;
 let overridesCached = null;
 let overridesDbRevision = 0;
 
-function loadCoordOverrides() {
+async function loadCoordOverrides() {
   if (DB_ENABLED) {
     if (overridesCached && overridesCached.dbRevision === overridesDbRevision) return overridesCached;
-    const byId = hospitalRepository.listCoordOverridesById();
+    const byId = await hospitalRepository.listCoordOverridesById();
     overridesCached = { mtimeMs: null, dbRevision: overridesDbRevision, byId, path: null };
     return overridesCached;
   }
@@ -325,13 +325,13 @@ function loadCoordOverrides() {
   return overridesCached;
 }
 
-function persistCoordOverride(id, { lat, lng, source }) {
+async function persistCoordOverride(id, { lat, lng, source }) {
   if (!COORD_OVERRIDES_ENABLED) return;
   if (!id) return;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
   if (DB_ENABLED) {
-    hospitalRepository.upsertCoordOverride(String(id), { lat, lng, source: source || "OVERRIDE" });
+    await hospitalRepository.upsertCoordOverride(String(id), { lat, lng, source: source || "OVERRIDE" });
     overridesDbRevision += 1;
     overridesCached = null;
     bumpDbHospitalsRevision();
@@ -470,7 +470,7 @@ async function geocodeHospitalRecord(hospital) {
       hospital.lat = match.lat;
       hospital.lng = match.lng;
       hospital.coordenadas_fuente = "NOMINATIM";
-      persistCoordOverride(hospital.id, { lat: match.lat, lng: match.lng, source: "NOMINATIM" });
+      await persistCoordOverride(hospital.id, { lat: match.lat, lng: match.lng, source: "NOMINATIM" });
       geocodedCount += 1;
       return match;
     }
@@ -719,7 +719,7 @@ let dbHospitalsCache = null;
 let dbHospitalsRevision = 0;
 let dbSeedPromise = null;
 
-function loadHospitalsFromCsv() {
+async function loadHospitalsFromCsv() {
   const csvPath = getCsvPath();
   let stat;
   try {
@@ -932,7 +932,7 @@ function loadHospitalsFromCsv() {
     }
   }
 
-  const overrides = loadCoordOverrides();
+  const overrides = await loadCoordOverrides();
   for (const agg of aggregations.values()) {
     const profs = Array.isArray(agg.profesiones) ? agg.profesiones.filter(Boolean) : [];
     profs.sort((a, b) => a.localeCompare(b));
@@ -1000,14 +1000,14 @@ async function importHospitalsToDb({ force } = {}) {
     return { upserted: 0, csvPath: null, renipressPath: null, skipped: true };
   }
 
-  const existingCount = hospitalRepository.countHospitals();
+  const existingCount = await hospitalRepository.countHospitals();
   if (existingCount > 0 && !force) {
     return { upserted: 0, csvPath: null, renipressPath: null, skipped: true };
   }
 
-  const store = loadHospitalsFromCsv();
+  const store = await loadHospitalsFromCsv();
   const rows = store.records.map(hospitalToDbRow);
-  hospitalRepository.upsertHospitals(rows);
+  await hospitalRepository.upsertHospitals(rows);
   bumpDbHospitalsRevision();
 
   return {
@@ -1022,18 +1022,17 @@ async function ensureDbSeeded() {
   if (!DB_ENABLED) return;
   if (dbSeedPromise) return dbSeedPromise;
   dbSeedPromise = (async () => {
-    const count = hospitalRepository.countHospitals();
+    const count = await hospitalRepository.countHospitals();
     if (count > 0) return;
-    throw new HttpError(500, "Base de datos vacía. Falta poblar serums.db antes de usar el backend.", {
-      DB_PATH,
-    });
+
+    throw new HttpError(500, "Base de datos vacía. Falta poblarla.", { DB_PATH });
   })();
   return dbSeedPromise;
 }
 
-function loadHospitalsFromDb() {
+async function loadHospitalsFromDb() {
   if (dbHospitalsCache && dbHospitalsCache.revision === dbHospitalsRevision) return dbHospitalsCache;
-  const records = hospitalRepository.listHospitalsWithOverrides();
+  const records = await hospitalRepository.listHospitalsWithOverrides();
   const byId = new Map();
   for (const h of records) byId.set(String(h.id), h);
   dbHospitalsCache = { revision: dbHospitalsRevision, records, byId };
@@ -1074,7 +1073,7 @@ function summarizeOffers(offers) {
 
 async function listHospitals(filters) {
   if (DB_ENABLED) await ensureDbSeeded();
-  const store = DB_ENABLED ? loadHospitalsFromDb() : loadHospitalsFromCsv();
+  const store = DB_ENABLED ? await loadHospitalsFromDb() : await loadHospitalsFromCsv();
 
   const profesion = cleanString(filters.profesion);
   const institucion = cleanString(filters.institucion);
@@ -1106,7 +1105,7 @@ async function listHospitals(filters) {
   if (!DB_ENABLED) return [];
 
   const ids = base.map((h) => String(h.id)).filter(Boolean);
-  const summary = serumsOfferRepository.listOfferSummaryByHospitalIds(ids, {
+  const summary = await serumsOfferRepository.listOfferSummaryByHospitalIds(ids, {
     periodo: serums_periodo || null,
     modalidad: serums_modalidad || null,
     profesion: profesion || null,
@@ -1117,12 +1116,12 @@ async function listHospitals(filters) {
 
 async function getHospitalById(id) {
   if (DB_ENABLED) await ensureDbSeeded();
-  const store = DB_ENABLED ? loadHospitalsFromDb() : loadHospitalsFromCsv();
+  const store = DB_ENABLED ? await loadHospitalsFromDb() : await loadHospitalsFromCsv();
   const hospital = store.byId.get(String(id));
   if (!hospital) throw new HttpError(404, "Hospital no encontrado");
   if (!DB_ENABLED) return hospital;
 
-  const offers = serumsOfferRepository.listOffersByHospitalId(hospital.id);
+  const offers = await serumsOfferRepository.listOffersByHospitalId(hospital.id);
   const resumen = summarizeOffers(offers);
   return { ...hospital, serums_ofertas: offers, serums_resumen: resumen };
 }
@@ -1138,17 +1137,17 @@ async function geocodeHospitalById(id) {
   return hospital;
 }
 
-function __persistCoordOverrideForImport(id, { lat, lng, source }) {
+async function __persistCoordOverrideForImport(id, { lat, lng, source }) {
   if (!id) return;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
   if (DB_ENABLED) {
-    hospitalRepository.upsertCoordOverride(String(id), { lat, lng, source: source || "OVERRIDE" });
+    await hospitalRepository.upsertCoordOverride(String(id), { lat, lng, source: source || "OVERRIDE" });
     overridesDbRevision += 1;
     overridesCached = null;
     bumpDbHospitalsRevision();
     return;
   }
-  persistCoordOverride(id, { lat, lng, source });
+  await persistCoordOverride(id, { lat, lng, source });
 }
 
 module.exports = {

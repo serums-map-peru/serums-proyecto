@@ -14,7 +14,7 @@ function getOverridesJsonPath() {
   return path.resolve(configured);
 }
 
-function importOverridesJsonIntoDb() {
+async function importOverridesJsonIntoDb() {
   if (!DB_ENABLED) return { imported: 0, skipped: 0, path: null };
   const overridesPath = getOverridesJsonPath();
   let raw;
@@ -42,7 +42,7 @@ function importOverridesJsonIntoDb() {
       skipped += 1;
       continue;
     }
-    hospitalService.__persistCoordOverrideForImport(String(id), { lat, lng, source });
+    await hospitalService.__persistCoordOverrideForImport(String(id), { lat, lng, source });
     imported += 1;
   }
   return { imported, skipped, path: overridesPath };
@@ -54,7 +54,7 @@ async function main() {
     process.exit(0);
   }
 
-  const overridesResult = importOverridesJsonIntoDb();
+  const overridesResult = await importOverridesJsonIntoDb();
   if (overridesResult.path) {
     process.stdout.write(
       `Overrides: importados=${overridesResult.imported}, omitidos=${overridesResult.skipped}, path=${overridesResult.path}\n`,
@@ -72,4 +72,3 @@ main().catch((e) => {
   process.stderr.write(`${message}\n`);
   process.exit(1);
 });
-

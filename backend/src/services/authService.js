@@ -72,15 +72,15 @@ async function register({ email, password, name }) {
   if (!isValidEmailFormat(e)) throw new HttpError(400, "Email inválido");
   if (p.length < 8) throw new HttpError(400, "La contraseña debe tener al menos 8 caracteres");
 
-  const existing = userRepository.findUserByEmail(e);
+  const existing = await userRepository.findUserByEmail(e);
   if (existing) throw new HttpError(409, "Este email ya está registrado");
 
   const password_hash = await bcrypt.hash(p, 10);
-  const created = userRepository.createUser({ email: e, password_hash, name: n || null });
+  const created = await userRepository.createUser({ email: e, password_hash, name: n || null });
   if (!created) throw new HttpError(500, "No se pudo crear el usuario");
 
   if (!isEmailVerificationEnabled()) {
-    userRepository.markEmailVerified(created.id);
+    await userRepository.markEmailVerified(created.id);
     const token = signToken({ id: created.id, email: created.email });
     return { token, user: { id: created.id, email: created.email, name: created.name, email_verified: true } };
   }
@@ -92,7 +92,7 @@ async function register({ email, password, name }) {
   const expires_at = addMinutesIso(ttlMinutes);
   const sent_at = nowIso();
 
-  emailVerificationRepository.upsertForUser(created.id, code_hash, expires_at, sent_at);
+  await emailVerificationRepository.upsertForUser(created.id, code_hash, expires_at, sent_at);
   await emailService.sendVerificationCode({ to: e, code });
 
   return {
@@ -108,7 +108,7 @@ async function login({ email, password }) {
   if (!isValidEmailFormat(e)) throw new HttpError(400, "Email inválido");
   if (!p) throw new HttpError(400, "Contraseña requerida");
 
-  const found = userRepository.findUserByEmail(e);
+  const found = await userRepository.findUserByEmail(e);
   if (!found || !found.password_hash) throw new HttpError(401, "Credenciales inválidas");
   if (isEmailVerificationEnabled() && !found.email_verified) {
     throw new HttpError(403, "Debes verificar tu correo antes de iniciar sesión");
@@ -128,11 +128,11 @@ async function verifyEmail({ email, code }) {
   if (!isValidEmailFormat(e)) throw new HttpError(400, "Email inválido");
   if (!/^\d{4,8}$/.test(c)) throw new HttpError(400, "Código inválido");
 
-  const user = userRepository.findUserByEmail(e);
+  const user = await userRepository.findUserByEmail(e);
   if (!user) throw new HttpError(400, "Código inválido");
 
   if (!isEmailVerificationEnabled()) {
-    if (!user.email_verified) userRepository.markEmailVerified(user.id);
+    if (!user.email_verified) await userRepository.markEmailVerified(user.id);
     const token = signToken(user);
     return { token, user: { id: user.id, email: user.email, name: user.name, email_verified: true } };
   }
@@ -142,11 +142,11 @@ async function verifyEmail({ email, code }) {
     return { token, user: { id: user.id, email: user.email, name: user.name, email_verified: true } };
   }
 
-  const v = emailVerificationRepository.findForUser(user.id);
+  const v = await emailVerificationRepository.findForUser(user.id);
   if (!v) throw new HttpError(400, "Código inválido");
 
   if (new Date(v.expires_at).getTime() < Date.now()) {
-    emailVerificationRepository.deleteForUser(user.id);
+    await emailVerificationRepository.deleteForUser(user.id);
     throw new HttpError(400, "Código expirado");
   }
 
@@ -154,12 +154,12 @@ async function verifyEmail({ email, code }) {
 
   const expected = hashCode(e, c);
   if (expected !== v.code_hash) {
-    emailVerificationRepository.incrementAttempts(user.id);
+    await emailVerificationRepository.incrementAttempts(user.id);
     throw new HttpError(400, "Código inválido");
   }
 
-  userRepository.markEmailVerified(user.id);
-  emailVerificationRepository.deleteForUser(user.id);
+  await userRepository.markEmailVerified(user.id);
+  await emailVerificationRepository.deleteForUser(user.id);
 
   const token = signToken(user);
   return { token, user: { id: user.id, email: user.email, name: user.name, email_verified: true } };
@@ -170,11 +170,11 @@ async function resendVerification({ email }) {
   if (!isValidEmailFormat(e)) throw new HttpError(400, "Email inválido");
   if (!isEmailVerificationEnabled()) return { sent: true };
 
-  const user = userRepository.findUserByEmail(e);
+  const user = await userRepository.findUserByEmail(e);
   if (!user) return { sent: true };
   if (user.email_verified) return { sent: true };
 
-  const v = emailVerificationRepository.findForUser(user.id);
+  const v = await emailVerificationRepository.findForUser(user.id);
   const minSeconds = getEnvNumber("EMAIL_VERIFICATION_RESEND_SECONDS", 60);
   if (v && v.last_sent_at) {
     const last = new Date(v.last_sent_at).getTime();
@@ -190,17 +190,16 @@ async function resendVerification({ email }) {
   const expires_at = addMinutesIso(ttlMinutes);
   const sent_at = nowIso();
 
-  emailVerificationRepository.upsertForUser(user.id, code_hash, expires_at, sent_at);
+  await emailVerificationRepository.upsertForUser(user.id, code_hash, expires_at, sent_at);
   await emailService.sendVerificationCode({ to: e, code });
 
   return { sent: true };
 }
 
 async function me(userId) {
-  const user = userRepository.findUserById(userId);
+  const user = await userRepository.findUserById(userId);
   if (!user) throw new HttpError(404, "Usuario no encontrado");
   return { id: user.id, email: user.email, name: user.name, email_verified: !!user.email_verified };
 }
 
 module.exports = { register, login, me, verifyEmail, resendVerification, getJwtSecret };
-
