@@ -22,7 +22,7 @@ function parseAllowedOrigins(value) {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw || raw === "*") return { any: true, list: [] };
   const list = raw
-    .split(",")
+    .split(/[,\s]+/)
     .map((s) => normalizeOrigin(s))
     .filter(Boolean);
   return { any: false, list };
