@@ -9,6 +9,7 @@ const DB_JOURNAL_MODE = getEnvString("DB_JOURNAL_MODE", "DELETE");
 const DB_DRIVER_RAW = getEnvString("DB_DRIVER", "");
 const DATABASE_URL = getEnvString("DATABASE_URL", "");
 const PG_CONNECTION_STRING = getEnvString("PG_CONNECTION_STRING", DATABASE_URL);
+const PGSSLMODE = getEnvString("PGSSLMODE", "");
 const DB_DRIVER =
   (DB_DRIVER_RAW && DB_DRIVER_RAW.trim().toLowerCase()) ||
   (PG_CONNECTION_STRING && PG_CONNECTION_STRING.trim().length > 0 ? "postgres" : "sqlite");
@@ -279,6 +280,28 @@ async function seedPostgresFromBundledSqlite(pool) {
   }
 }
 
+function getPostgresPoolOptions(connectionString) {
+  const cs = String(connectionString || "").trim();
+  if (!cs) return { connectionString: cs };
+  try {
+    const u = new URL(cs);
+    const host = u.hostname || "";
+    const sslmode = (u.searchParams.get("sslmode") || "").toLowerCase();
+    const envSslMode = String(PGSSLMODE || "").trim().toLowerCase();
+    const enableSsl = sslmode === "require" || envSslMode === "require" || host.endsWith(".render.com");
+    return {
+      connectionString: cs,
+      ssl: enableSsl ? { rejectUnauthorized: false } : undefined,
+    };
+  } catch {
+    const envSslMode = String(PGSSLMODE || "").trim().toLowerCase();
+    return {
+      connectionString: cs,
+      ssl: envSslMode === "require" ? { rejectUnauthorized: false } : undefined,
+    };
+  }
+}
+
 function canSafelySeedFromBundledDb(db) {
   if (!DB_ENABLED) return false;
   const seedPath = path.resolve(__dirname, "../data/serums.db");
@@ -482,7 +505,9 @@ async function ensureSchemaReady() {
 
       const shouldSeed = await shouldSeedPostgresFromBundledSqlite(db);
       if (shouldSeed) {
-        await seedPostgresFromBundledSqlite(db);
+        process.stdout.write("DB seed: Postgres vacío, migrando desde src/data/serums.db...\n");
+        const result = await seedPostgresFromBundledSqlite(db);
+        process.stdout.write(`DB seed: ${result && result.seeded ? "OK" : "SKIP"}\n`);
       }
       return;
     }
@@ -503,7 +528,14 @@ function getDb() {
       throw new Error("PG_CONNECTION_STRING/DATABASE_URL no configurado");
     }
     const { Pool } = require("pg");
-    dbInstance = new Pool({ connectionString: PG_CONNECTION_STRING });
+    const options = getPostgresPoolOptions(PG_CONNECTION_STRING);
+    try {
+      const u = new URL(String(PG_CONNECTION_STRING).trim());
+      process.stdout.write(`DB: postgres host=${u.hostname} ssl=${options.ssl ? 1 : 0}\n`);
+    } catch {
+      process.stdout.write(`DB: postgres ssl=${options.ssl ? 1 : 0}\n`);
+    }
+    dbInstance = new Pool(options);
     return dbInstance;
   }
 
