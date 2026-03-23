@@ -1,0 +1,27 @@
+{
+  "name": "serums-map-peru-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "import:db": "node src/scripts/importHospitalsToDb.js",
+    "import:offers": "node src/scripts/importSerumsOffersToDb.js",
+    "seed:pg": "npm run import:db && npm run import:offers"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "better-sqlite3": "^11.8.0",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.16",
+    "pg": "^8.13.0",
+    "swagger-ui-express": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
