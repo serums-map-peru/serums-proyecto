@@ -3,10 +3,51 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
+import { Button } from "@/shared/ui/Button";
 import { IconButton } from "@/shared/ui/IconButton";
 import { cn } from "@/shared/lib/cn";
-import { HospitalMapItem, NominatimResult } from "@/features/hospitals/types";
+import { FavoriteItem, HospitalMapItem, NominatimResult } from "@/features/hospitals/types";
 import { clearAuthToken, getAuthToken } from "@/features/auth/token";
+
+function toTitleCase(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const minor = new Set([
+    "a",
+    "al",
+    "con",
+    "de",
+    "del",
+    "desde",
+    "e",
+    "el",
+    "en",
+    "la",
+    "las",
+    "lo",
+    "los",
+    "o",
+    "para",
+    "por",
+    "sin",
+    "sobre",
+    "u",
+    "y",
+  ]);
+
+  return raw
+    .split(/\s+/g)
+    .filter(Boolean)
+    .map((token, idx) => {
+      if (/^\d+$/.test(token)) return token;
+      if (/^[A-Z]{2,}(\.[A-Z]{1,})*\.?$/.test(token)) return token;
+      const lower = token.toLowerCase();
+      if (idx > 0 && minor.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
 
 export type AppHeaderProps = {
   onOpenFilters: () => void;
@@ -14,6 +55,12 @@ export type AppHeaderProps = {
   centerOnUserLoading?: boolean;
   showSearch?: boolean;
   onOpenAuth?: (mode: "login" | "register") => void;
+  favorites?: FavoriteItem[];
+  favoritesLoading?: boolean;
+  favoritesError?: string | null;
+  onRefreshFavorites?: () => void;
+  onSelectFavorite?: (fav: FavoriteItem) => void;
+  onRemoveFavorite?: (fav: FavoriteItem) => void;
   searchValue: string;
   searchLoading: boolean;
   searchError?: string | null;
@@ -85,12 +132,26 @@ function HeartIcon() {
   );
 }
 
+function XIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function AppHeader({
   onOpenFilters,
   onCenterOnUser,
   centerOnUserLoading = false,
   showSearch = true,
   onOpenAuth,
+  favorites = [],
+  favoritesLoading = false,
+  favoritesError = null,
+  onRefreshFavorites,
+  onSelectFavorite,
+  onRemoveFavorite,
   searchValue,
   searchLoading,
   searchError = null,
@@ -143,17 +204,17 @@ export function AppHeader({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            className="flex items-center gap-3 rounded-2xl px-1 py-1 text-left hover:bg-black/[0.03]"
+            className="flex items-center rounded-2xl px-1 py-2 text-left hover:bg-black/[0.03]"
             onClick={() => router.push("/")}
             aria-label="Volver al mapa"
             title="Volver al mapa"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-black/[0.04] text-[var(--title)]">
-              <span className="text-lg font-semibold">S</span>
-            </div>
-            <div className="leading-tight">
-              <div className="text-base font-semibold text-[var(--title)]">SERUMS Map Perú</div>
-              <div className="text-xs font-medium text-[var(--label)]">Mapa de establecimientos</div>
+            <div className="h-10 w-[200px] sm:w-[260px]">
+              <img
+                src="/LISA%20logo.png"
+                alt="LISA"
+                className="h-full w-full object-contain"
+              />
             </div>
           </button>
 
@@ -167,13 +228,13 @@ export function AppHeader({
               }}
               onFocus={() => setOpen(true)}
               onBlur={() => setTimeout(() => setOpen(false), 120)}
-              placeholder="Buscar lugar…"
-              className="h-10 w-full rounded-2xl border border-[var(--border)] bg-white px-4 text-sm font-medium text-[var(--title)] shadow-[var(--shadow-soft)] outline-none ring-0 placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5"
+              placeholder="Buscar establecimiento, distrito o provincia..."
+              className="h-10 w-full rounded-full bg-[var(--search-surface)] px-5 text-sm font-medium text-[var(--title)] shadow-[var(--shadow-soft)] outline-none ring-0 placeholder:text-[var(--label)] focus:ring-2 focus:ring-black/5"
             />
 
             <div
               className={cn(
-                "absolute left-0 right-0 top-[calc(100%+10px)] z-[3500] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white shadow-[var(--shadow-soft)]",
+                "absolute left-0 right-0 top-[calc(100%+10px)] z-[3500] overflow-hidden rounded-[var(--radius-panel)] bg-white shadow-[var(--shadow-soft)]",
                 open && (searchLoading || searchResults.length > 0 || hospitalSearchResults.length > 0 || !!searchError)
                   ? "block"
                   : "hidden",
@@ -267,7 +328,10 @@ export function AppHeader({
               <IconButton
                 aria-label="Favoritos"
                 title="Favoritos"
-                onClick={() => setFavoritesOpen((v) => !v)}
+                onClick={() => {
+                  setAuthed(!!getAuthToken());
+                  setFavoritesOpen((v) => !v);
+                }}
               >
                 <HeartIcon />
               </IconButton>
@@ -281,45 +345,89 @@ export function AppHeader({
                     </div>
                   </div>
                   <div className="border-t border-[var(--border)] p-2">
-                    <div className="grid gap-2">
-                      <button
-                        type="button"
-                        className="flex items-start justify-between gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-left hover:bg-black/[0.04]"
-                      >
-                        <div className="min-w-0">
-                          <div className="line-clamp-1 text-sm font-semibold text-[var(--title)]">Centro De Salud Referencial</div>
-                          <div className="line-clamp-1 text-xs font-medium text-[var(--label)]">Provincia · Distrito · Departamento</div>
+                    {!authed ? (
+                      <div className="grid gap-2">
+                        <div className="px-2 py-2 text-xs font-medium text-[var(--label)]">
+                          Inicia sesión para guardar y ver tus favoritos.
                         </div>
-                        <div className="mt-0.5 text-[var(--label)]">
-                          <HeartIcon />
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        className="flex items-start justify-between gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-left hover:bg-black/[0.04]"
-                      >
-                        <div className="min-w-0">
-                          <div className="line-clamp-1 text-sm font-semibold text-[var(--title)]">Hospital Regional</div>
-                          <div className="line-clamp-1 text-xs font-medium text-[var(--label)]">Provincia · Distrito · Departamento</div>
-                        </div>
-                        <div className="mt-0.5 text-[var(--label)]">
-                          <HeartIcon />
-                        </div>
-                      </button>
-                    </div>
-                    <div className="mt-2 grid gap-2">
-                      <Button
-                        variant="secondary"
-                        className="w-full"
-                        onClick={() => {
-                          setFavoritesOpen(false);
-                          if (onOpenAuth) onOpenAuth("login");
-                          else router.push("/?auth=login");
-                        }}
-                      >
-                        Iniciar sesión
-                      </Button>
-                    </div>
+                        <Button
+                          variant="secondary"
+                          className="w-full"
+                          onClick={() => {
+                            setFavoritesOpen(false);
+                            if (onOpenAuth) onOpenAuth("login");
+                            else router.push("/?auth=login");
+                          }}
+                        >
+                          Iniciar sesión
+                        </Button>
+                      </div>
+                    ) : favoritesLoading ? (
+                      <div className="px-3 py-3 text-sm font-medium text-[var(--label)]">Cargando…</div>
+                    ) : favoritesError ? (
+                      <div className="grid gap-2 px-3 py-3">
+                        <div className="text-sm font-medium text-[var(--title)]">{favoritesError}</div>
+                        {onRefreshFavorites ? (
+                          <button
+                            type="button"
+                            className="w-fit rounded-2xl border border-[var(--border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] hover:bg-black/[0.03]"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={onRefreshFavorites}
+                          >
+                            Reintentar
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : favorites.length === 0 ? (
+                      <div className="px-3 py-3 text-xs font-medium text-[var(--label)]">Aún no tienes favoritos.</div>
+                    ) : (
+                      <div className="grid gap-2">
+                        {favorites.map((f) => {
+                          const title =
+                            f.item_type === "hospital"
+                              ? toTitleCase(f.hospital?.nombre_establecimiento || f.name || f.item_id)
+                              : f.name || "Lugar";
+                          const subtitle =
+                            f.item_type === "hospital" && f.hospital
+                              ? [f.hospital.provincia, f.hospital.distrito, f.hospital.departamento].filter(Boolean).join(" · ")
+                              : f.item_type === "place"
+                                ? "Lugar guardado"
+                                : "";
+
+                          return (
+                            <div
+                              key={f.id}
+                              className="flex items-start justify-between gap-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3"
+                            >
+                              <button
+                                type="button"
+                                className="min-w-0 text-left"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setFavoritesOpen(false);
+                                  onSelectFavorite?.(f);
+                                }}
+                              >
+                                <div className="line-clamp-1 text-sm font-semibold text-[var(--title)]">{title}</div>
+                                {subtitle ? (
+                                  <div className="line-clamp-1 text-xs font-medium text-[var(--label)]">{subtitle}</div>
+                                ) : null}
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-[var(--label)] shadow-[0_1px_0_rgba(0,0,0,0.04)] hover:bg-black/[0.03]"
+                                aria-label="Quitar de favoritos"
+                                title="Quitar de favoritos"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => onRemoveFavorite?.(f)}
+                              >
+                                <XIcon />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : null}
@@ -420,13 +528,13 @@ export function AppHeader({
             }}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 120)}
-            placeholder="Buscar lugar…"
-            className="h-10 w-full rounded-2xl border border-[var(--border)] bg-white px-4 text-sm font-medium text-[var(--title)] shadow-[var(--shadow-soft)] outline-none ring-0 placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5"
+            placeholder="Buscar establecimiento, distrito o provincia..."
+            className="h-10 w-full rounded-full bg-[var(--search-surface)] px-5 text-sm font-medium text-[var(--title)] shadow-[var(--shadow-soft)] outline-none ring-0 placeholder:text-[var(--label)] focus:ring-2 focus:ring-black/5"
           />
 
           <div
             className={cn(
-              "absolute left-0 right-0 top-[calc(100%+10px)] z-[3500] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white shadow-[var(--shadow-soft)]",
+              "absolute left-0 right-0 top-[calc(100%+10px)] z-[3500] overflow-hidden rounded-[var(--radius-panel)] bg-white shadow-[var(--shadow-soft)]",
               open && (searchLoading || searchResults.length > 0 || hospitalSearchResults.length > 0 || !!searchError)
                 ? "block"
                 : "hidden",
@@ -466,7 +574,9 @@ export function AppHeader({
                           setOpen(false);
                         }}
                       >
-                        <div className="line-clamp-1 text-sm font-semibold text-[var(--title)]">{h.nombre_establecimiento}</div>
+                        <div className="line-clamp-1 text-sm font-semibold text-[var(--title)]">
+                          {toTitleCase(h.nombre_establecimiento)}
+                        </div>
                         <div className="line-clamp-1 text-xs font-medium text-[var(--label)]">
                           {h.distrito} · {h.provincia} · {h.departamento} · {h.codigo_renipress_modular || h.id}
                         </div>

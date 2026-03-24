@@ -8,16 +8,16 @@ import { Button } from "@/shared/ui/Button";
 import { Card } from "@/shared/ui/Card";
 import { cn } from "@/shared/lib/cn";
 
+type FacetGroup = {
+  values: string[];
+  enabled: Record<string, boolean>;
+};
+
 type Options = {
-  profesiones: string[];
-  instituciones: string[];
-  departamentos: string[];
-  provincias: string[];
-  distritos: string[];
-  grados_dificultad: string[];
-  categorias: string[];
-  zaf: string[];
-  ze: string[];
+  departamentos: FacetGroup;
+  instituciones: FacetGroup;
+  grados_dificultad: FacetGroup;
+  categorias: FacetGroup;
 };
 
 export type FiltersBarProps = {
@@ -61,18 +61,27 @@ function SectionChevron({ open }: { open: boolean }) {
 function AppleCheckbox({
   label,
   checked,
+  disabled,
   onChange,
 }: {
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: () => void;
 }) {
   return (
     <button
       type="button"
-      className="flex w-full items-center justify-between gap-3 rounded-2xl px-2 py-2 text-left hover:bg-black/[0.03]"
-      onClick={onChange}
+      className={cn(
+        "flex w-full items-center justify-between gap-3 rounded-2xl px-2 py-2 text-left",
+        disabled && !checked ? "cursor-not-allowed opacity-45" : "hover:bg-black/[0.03]",
+      )}
+      onClick={() => {
+        if (disabled && !checked) return;
+        onChange();
+      }}
       aria-pressed={checked}
+      aria-disabled={disabled && !checked ? true : undefined}
     >
       <div className="min-w-0 text-sm font-medium text-[var(--label)]">{label}</div>
       <div
@@ -114,6 +123,72 @@ function formatDistance(meters: number) {
   return `${(meters / 1000).toFixed(1)} km`;
 }
 
+function toTitleCase(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const minor = new Set([
+    "a",
+    "al",
+    "con",
+    "de",
+    "del",
+    "desde",
+    "e",
+    "el",
+    "en",
+    "la",
+    "las",
+    "lo",
+    "los",
+    "o",
+    "para",
+    "por",
+    "sin",
+    "sobre",
+    "u",
+    "y",
+  ]);
+
+  return raw
+    .split(/\s+/g)
+    .filter(Boolean)
+    .map((token, idx) => {
+      if (/^\d+$/.test(token)) return token;
+      if (/^[A-Z]{2,}(\.[A-Z]{1,})*\.?$/.test(token)) return token;
+      const lower = token.toLowerCase();
+      if (idx > 0 && minor.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
+
+function normalizeInstitution(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function institutionAccentColor(institucion: string) {
+  const v = normalizeInstitution(institucion);
+  if (v.includes("essalud")) return "#38BDF8";
+  if (v.includes("minsa")) return "#FBBF24";
+  if (
+    v.includes("ffaa") ||
+    v.includes("ff.aa") ||
+    v.includes("fuerza aerea") ||
+    v.includes("aerea del peru") ||
+    v.includes("marina") ||
+    v.includes("policia") ||
+    v.includes("ejercito")
+  )
+    return "#22C55E";
+  return "#EF4444";
+}
+
 export function FiltersBar({
   filters,
   setFilters,
@@ -125,41 +200,72 @@ export function FiltersBar({
   onCloseMobile,
 }: FiltersBarProps) {
   const [locationOpen, setLocationOpen] = React.useState(false);
-  const [filtersOpen, setFiltersOpen] = React.useState(true);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [airportOpen, setAirportOpen] = React.useState(false);
 
   const [selectedDepartamentos, setSelectedDepartamentos] = React.useState<string[]>(
-    filters.departamento ? [filters.departamento] : [],
+    Array.isArray(filters.departamento) ? filters.departamento : [],
   );
+  const selectedDepartamentosRef = React.useRef<string[]>(selectedDepartamentos);
   const [selectedInstituciones, setSelectedInstituciones] = React.useState<string[]>(
-    filters.institucion ? [filters.institucion] : [],
+    Array.isArray(filters.institucion) ? filters.institucion : [],
   );
-  const [selectedGd, setSelectedGd] = React.useState<string[]>(filters.grado_dificultad ? [filters.grado_dificultad] : []);
-  const [selectedCategorias, setSelectedCategorias] = React.useState<string[]>(filters.categoria ? [filters.categoria] : []);
-  const [selectedAirportDistance, setSelectedAirportDistance] = React.useState<string[]>([]);
+  const selectedInstitucionesRef = React.useRef<string[]>(selectedInstituciones);
+  const [selectedGd, setSelectedGd] = React.useState<string[]>(
+    Array.isArray(filters.grado_dificultad) ? filters.grado_dificultad : [],
+  );
+  const selectedGdRef = React.useRef<string[]>(selectedGd);
+  const [selectedCategorias, setSelectedCategorias] = React.useState<string[]>(
+    Array.isArray(filters.categoria) ? filters.categoria : [],
+  );
+  const selectedCategoriasRef = React.useRef<string[]>(selectedCategorias);
+  const [selectedAirportDistance, setSelectedAirportDistance] = React.useState<string[]>(
+    [],
+  );
 
   React.useEffect(() => {
-    setSelectedDepartamentos(filters.departamento ? [filters.departamento] : []);
+    const next = Array.isArray(filters.departamento) ? filters.departamento : [];
+    selectedDepartamentosRef.current = next;
+    setSelectedDepartamentos(next);
   }, [filters.departamento]);
 
   React.useEffect(() => {
-    setSelectedInstituciones(filters.institucion ? [filters.institucion] : []);
+    const next = Array.isArray(filters.institucion) ? filters.institucion : [];
+    selectedInstitucionesRef.current = next;
+    setSelectedInstituciones(next);
   }, [filters.institucion]);
 
   React.useEffect(() => {
-    setSelectedGd(filters.grado_dificultad ? [filters.grado_dificultad] : []);
+    const next = Array.isArray(filters.grado_dificultad) ? filters.grado_dificultad : [];
+    selectedGdRef.current = next;
+    setSelectedGd(next);
   }, [filters.grado_dificultad]);
 
   React.useEffect(() => {
-    setSelectedCategorias(filters.categoria ? [filters.categoria] : []);
+    const next = Array.isArray(filters.categoria) ? filters.categoria : [];
+    selectedCategoriasRef.current = next;
+    setSelectedCategorias(next);
   }, [filters.categoria]);
 
+  React.useEffect(() => {
+    if (!selectedAirportDistance.length) {
+      setFilters((prev) => ({ ...prev, airport_hours_max: null }));
+      return;
+    }
+    const toHours = (s: string) => {
+      const m = s.match(/<(\d+)h/);
+      return m ? Number(m[1]) : null;
+    };
+    const hours = selectedAirportDistance.map(toHours).filter((n): n is number => Number.isFinite(n));
+    const minH = hours.length ? Math.min(...hours) : null;
+    setFilters((prev) => ({ ...prev, airport_hours_max: minH }));
+  }, [selectedAirportDistance, setFilters]);
   const toggleMulti = React.useCallback((prev: string[], value: string) => {
     return prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value];
   }, []);
 
   return (
-    <Card className="h-full w-full overflow-hidden bg-white">
+    <Card className="flex h-full w-full flex-col overflow-hidden bg-white">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-white px-5 py-4">
         <div className="min-w-0">
           <div className="text-base font-semibold text-[var(--title)]">Filtros</div>
@@ -188,10 +294,13 @@ export function FiltersBar({
         </div>
       </div>
 
-      <div className="h-full overflow-auto px-3 py-4">
+      <div
+        className="min-h-0 flex-1 overflow-auto overscroll-contain touch-pan-y px-3 py-4"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
         <div className="grid gap-3">
           <div className="rounded-[var(--radius-panel)] bg-white px-3 py-2 shadow-[var(--shadow-soft)]">
-            <button
+              <button
               type="button"
               className="flex w-full items-center justify-between gap-3 px-2 py-2"
               onClick={() => setLocationOpen((v) => !v)}
@@ -199,7 +308,7 @@ export function FiltersBar({
             >
               <div className="grid gap-0.5 text-left">
                 <SectionTitle>Ubicación</SectionTitle>
-                <div className="text-xs font-medium text-[var(--label)]">Departamento (filtro)</div>
+                <div className="text-xs font-medium text-[var(--label)]">Departamento</div>
               </div>
               <div className="text-[var(--label)]">
                 <SectionChevron open={locationOpen} />
@@ -207,36 +316,33 @@ export function FiltersBar({
             </button>
             <div
               className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
-              style={{ maxHeight: locationOpen ? 520 : 0, opacity: locationOpen ? 1 : 0 }}
+              style={{ maxHeight: locationOpen ? 4000 : 0, opacity: locationOpen ? 1 : 0 }}
             >
-              <div className="grid gap-1 px-1 pb-2">
-                {options.departamentos.slice(0, 18).map((d) => (
-                  <AppleCheckbox
-                    key={d}
-                    label={d}
-                    checked={selectedDepartamentos.includes(d)}
-                    onChange={() => {
-                      setSelectedDepartamentos((p) => {
-                        const next = toggleMulti(p, d);
-                        setFilters((prev) => ({
-                          ...prev,
-                          departamento: next.length > 0 ? next[next.length - 1] : null,
-                          provincia: null,
-                          distrito: null,
-                        }));
-                        return next;
-                      });
-                    }}
-                  />
-                ))}
-              </div>
-
-              <div className="px-3 pb-3 pt-2">
-                <div className="grid gap-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
-                  <div className="text-xs font-medium text-[var(--label)]">Provincia (informativo)</div>
-                  <div className="text-sm font-medium text-[var(--title)]">{filters.provincia || "—"}</div>
-                  <div className="text-xs font-medium text-[var(--label)]">Distrito (informativo)</div>
-                  <div className="text-sm font-medium text-[var(--title)]">{filters.distrito || "—"}</div>
+              <div
+                className="pr-1"
+              >
+                <div className="grid gap-1 px-1 pb-2">
+                  {options.departamentos.values.map((d) => {
+                    const checked = selectedDepartamentos.includes(d);
+                    const enabled = options.departamentos.enabled[d] ?? true;
+                    return (
+                      <AppleCheckbox
+                        key={d}
+                        label={d}
+                        checked={checked}
+                        disabled={!enabled}
+                        onChange={() => {
+                          const next = toggleMulti(selectedDepartamentosRef.current, d);
+                          selectedDepartamentosRef.current = next;
+                          setSelectedDepartamentos(next);
+                          setFilters((prev) => ({
+                            ...prev,
+                            departamento: next,
+                          }));
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -264,20 +370,50 @@ export function FiltersBar({
               <div className="grid gap-3 px-2 pb-3">
                 <div className="grid gap-1">
                   <div className="px-2 pt-1 text-xs font-medium text-[var(--label)]">Institución</div>
-                  {options.instituciones.slice(0, 10).map((i) => (
-                    <AppleCheckbox
-                      key={i}
-                      label={i}
-                      checked={selectedInstituciones.includes(i)}
-                      onChange={() => {
-                        setSelectedInstituciones((p) => {
-                          const next = toggleMulti(p, i);
-                          setFilters((prev) => ({ ...prev, institucion: next.length > 0 ? next[next.length - 1] : null }));
-                          return next;
-                        });
-                      }}
-                    />
-                  ))}
+                  <div
+                    className="max-h-[240px] overflow-y-auto overscroll-contain touch-pan-y pr-1"
+                    style={{ WebkitOverflowScrolling: "touch" }}
+                    onWheel={(e) => {
+                      const el = e.currentTarget as HTMLDivElement;
+                      const delta = e.deltaY;
+                      const atTop = el.scrollTop <= 0;
+                      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+                      if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
+                        e.preventDefault();
+                      }
+                      e.stopPropagation();
+                    }}
+                    onTouchStartCapture={(e) => {
+                      const el = e.currentTarget as HTMLDivElement;
+                      if (el.scrollHeight <= el.clientHeight) return;
+                      if (el.scrollTop <= 0) el.scrollTop = 1;
+                      else if (el.scrollTop + el.clientHeight >= el.scrollHeight) el.scrollTop = el.scrollHeight - el.clientHeight - 1;
+                    }}
+                    onTouchMove={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    <div className="grid gap-1">
+                      {options.instituciones.values.map((i) => {
+                        const checked = selectedInstituciones.includes(i);
+                        const enabled = options.instituciones.enabled[i] ?? true;
+                        return (
+                          <AppleCheckbox
+                            key={i}
+                            label={i}
+                            checked={checked}
+                            disabled={!enabled}
+                            onChange={() => {
+                              const next = toggleMulti(selectedInstitucionesRef.current, i);
+                              selectedInstitucionesRef.current = next;
+                              setSelectedInstituciones(next);
+                              setFilters((prev) => ({ ...prev, institucion: next }));
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid gap-1">
@@ -287,12 +423,12 @@ export function FiltersBar({
                       key={gd}
                       label={gd}
                       checked={selectedGd.includes(gd)}
+                      disabled={!(options.grados_dificultad.enabled[gd] ?? true)}
                       onChange={() => {
-                        setSelectedGd((p) => {
-                          const next = toggleMulti(p, gd);
-                          setFilters((prev) => ({ ...prev, grado_dificultad: next.length > 0 ? next[next.length - 1] : null }));
-                          return next;
-                        });
+                        const next = toggleMulti(selectedGdRef.current, gd);
+                        selectedGdRef.current = next;
+                        setSelectedGd(next);
+                        setFilters((prev) => ({ ...prev, grado_dificultad: next }));
                       }}
                     />
                   ))}
@@ -305,12 +441,12 @@ export function FiltersBar({
                       key={c}
                       label={c}
                       checked={selectedCategorias.includes(c)}
+                      disabled={!(options.categorias.enabled[c] ?? true)}
                       onChange={() => {
-                        setSelectedCategorias((p) => {
-                          const next = toggleMulti(p, c);
-                          setFilters((prev) => ({ ...prev, categoria: next.length > 0 ? next[next.length - 1] : null }));
-                          return next;
-                        });
+                        const next = toggleMulti(selectedCategoriasRef.current, c);
+                        selectedCategoriasRef.current = next;
+                        setSelectedCategorias(next);
+                        setFilters((prev) => ({ ...prev, categoria: next }));
                       }}
                     />
                   ))}
@@ -328,7 +464,7 @@ export function FiltersBar({
             >
               <div className="grid gap-0.5 text-left">
                 <SectionTitle>Distancia al aeropuerto</SectionTitle>
-                <div className="text-xs font-medium text-[var(--label)]">Filtro (diseño)</div>
+                <div className="text-xs font-medium text-[var(--label)]">Tiempo de manejo</div>
               </div>
               <div className="text-[var(--label)]">
                 <SectionChevron open={airportOpen} />
@@ -351,7 +487,7 @@ export function FiltersBar({
             </div>
           </div>
 
-          <div className="rounded-[var(--radius-panel)] bg-white px-4 py-3 shadow-[var(--shadow-soft)]">
+          <div className="rounded-[var(--radius-panel)] bg-white px-5 py-4 shadow-[var(--shadow-soft)]">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs font-medium text-[var(--label)]">Cerca de ti</div>
@@ -366,19 +502,23 @@ export function FiltersBar({
                     ? haversineMeters(userLocation, { lat: h.lat, lng: h.lng })
                     : null;
                 const isSelected = selectedHospitalId === h.id;
+                const accent = institutionAccentColor(h.institucion);
                 return (
                   <button
                     key={h.id}
                     type="button"
                     onClick={() => onSelectHospital(h)}
                     className={cn(
-                      "w-full rounded-[var(--radius-card)] px-3 py-3 text-left shadow-[0_1px_0_rgba(0,0,0,0.04)] transition-colors",
-                      isSelected ? "bg-black/[0.04]" : "bg-black/[0.02] hover:bg-black/[0.04]",
+                      "relative w-full overflow-hidden rounded-[var(--radius-card)] bg-white px-4 py-3 text-left shadow-[var(--shadow-soft)] transition-[background-color,box-shadow] duration-200 ease-out",
+                      isSelected
+                        ? "bg-[var(--background-secondary)] shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                        : "hover:bg-[var(--background-secondary)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)]",
                     )}
                   >
+                    <div className="absolute left-0 top-0 h-full w-1.5" style={{ background: accent }} aria-hidden="true" />
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 line-clamp-1 text-sm font-semibold text-[var(--title)]">
-                        {h.nombre_establecimiento}
+                      <div className="min-w-0 line-clamp-2 text-sm font-semibold leading-snug text-[var(--title)]">
+                        {toTitleCase(h.nombre_establecimiento)}
                       </div>
                       <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-[var(--label)] shadow-[0_1px_0_rgba(0,0,0,0.04)]">
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
@@ -395,7 +535,7 @@ export function FiltersBar({
                       {h.distrito} · {h.provincia} · {h.departamento}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[var(--label)]">
-                      {h.categoria ? (
+                      {h.categoria && String(h.categoria).trim() !== "0" ? (
                         <span className="rounded-full bg-white px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.04)]">{h.categoria}</span>
                       ) : null}
                       {h.grado_dificultad ? (

@@ -1,7 +1,9 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const { getEnvNumber, getEnvString } = require("../utils/env");
+const bcrypt = require("bcryptjs");
 
 const DB_ENABLED = getEnvNumber("DB_ENABLED", 1) !== 0;
 const DB_PATH = path.resolve(getEnvString("DB_PATH", path.resolve(__dirname, "../data/serums.db")));
@@ -334,6 +336,7 @@ function initSchema(db) {
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       name TEXT,
+      role TEXT NOT NULL DEFAULT 'user',
       email_verified INTEGER NOT NULL DEFAULT 0,
       email_verified_at TEXT,
       created_at TEXT
@@ -393,6 +396,20 @@ function initSchema(db) {
       FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS favorites (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      name TEXT,
+      lat REAL,
+      lon REAL,
+      meta_json TEXT,
+      created_at TEXT,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, item_type, item_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_hospitals_departamento ON hospitals(departamento);
     CREATE INDEX IF NOT EXISTS idx_hospitals_provincia ON hospitals(provincia);
     CREATE INDEX IF NOT EXISTS idx_hospitals_distrito ON hospitals(distrito);
@@ -404,10 +421,13 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_serums_offers_modalidad ON serums_offers(modalidad);
     CREATE INDEX IF NOT EXISTS idx_serums_offers_profesion ON serums_offers(profesion);
     CREATE INDEX IF NOT EXISTS idx_serums_offers_codigo ON serums_offers(codigo_renipress_modular);
+    CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
   `);
 
+  ensureColumn(db, "users", "role TEXT NOT NULL DEFAULT 'user'", "role");
   ensureColumn(db, "users", "email_verified INTEGER NOT NULL DEFAULT 0", "email_verified");
   ensureColumn(db, "users", "email_verified_at TEXT", "email_verified_at");
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_admin ON users(role) WHERE role = 'admin'`);
 }
 
 async function ensureSchemaReady() {
@@ -423,11 +443,13 @@ async function ensureSchemaReady() {
           email TEXT NOT NULL UNIQUE,
           password_hash TEXT NOT NULL,
           name TEXT,
+          role TEXT NOT NULL DEFAULT 'user',
           email_verified BOOLEAN NOT NULL DEFAULT FALSE,
           email_verified_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ
         );
       `);
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';`);
       await db.query(`
         CREATE TABLE IF NOT EXISTS email_verifications (
           user_id TEXT PRIMARY KEY,
@@ -491,6 +513,23 @@ async function ensureSchemaReady() {
         );
       `);
 
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS favorites (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          item_type TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          name TEXT,
+          lat DOUBLE PRECISION,
+          lon DOUBLE PRECISION,
+          meta_json TEXT,
+          created_at TIMESTAMPTZ,
+          CONSTRAINT fk_favorites_user
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(user_id, item_type, item_id)
+        );
+      `);
+
       await db.query(`CREATE INDEX IF NOT EXISTS idx_hospitals_departamento ON hospitals(departamento);`);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_hospitals_provincia ON hospitals(provincia);`);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_hospitals_distrito ON hospitals(distrito);`);
@@ -502,6 +541,8 @@ async function ensureSchemaReady() {
       await db.query(`CREATE INDEX IF NOT EXISTS idx_serums_offers_modalidad ON serums_offers(modalidad);`);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_serums_offers_profesion ON serums_offers(profesion);`);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_serums_offers_codigo ON serums_offers(codigo_renipress_modular);`);
+      await db.query(`CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);`);
+      await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_admin ON users(role) WHERE role = 'admin';`);
 
       const shouldSeed = await shouldSeedPostgresFromBundledSqlite(db);
       if (shouldSeed) {
@@ -509,12 +550,55 @@ async function ensureSchemaReady() {
         const result = await seedPostgresFromBundledSqlite(db);
         process.stdout.write(`DB seed: ${result && result.seeded ? "OK" : "SKIP"}\n`);
       }
+
+      const bootstrapPassword = getEnvString("ADMIN_PASSWORD", "").trim();
+      if (bootstrapPassword) {
+        const adminEmail = String(getEnvString("ADMIN_EMAIL", "admin@localisa.com") || "").trim().toLowerCase();
+        const adminName = String(getEnvString("ADMIN_NAME", "Admin") || "").trim() || "Admin";
+        const now = new Date().toISOString();
+        await db.query("UPDATE users SET role = 'user' WHERE role = 'admin' AND lower(email) <> lower($1)", [adminEmail]);
+        const existing = await db.query("SELECT id FROM users WHERE lower(email) = lower($1) LIMIT 1", [adminEmail]);
+        const existingId = (existing.rows && existing.rows[0] && existing.rows[0].id) || null;
+        const passwordHash = await bcrypt.hash(bootstrapPassword, 10);
+        if (existingId) {
+          await db.query(
+            "UPDATE users SET role = 'admin', password_hash = $1, email_verified = TRUE, email_verified_at = COALESCE(email_verified_at, $2), name = COALESCE(NULLIF(name, ''), $3) WHERE id = $4",
+            [passwordHash, now, adminName, existingId],
+          );
+        } else {
+          const id = crypto.randomBytes(16).toString("hex");
+          await db.query(
+            "INSERT INTO users (id, email, password_hash, name, role, email_verified, email_verified_at, created_at) VALUES ($1, $2, $3, $4, 'admin', TRUE, $5, $5)",
+            [id, adminEmail, passwordHash, adminName, now],
+          );
+        }
+      }
       return;
     }
 
     const db = getDb();
     if (!db) return;
     initSchema(db);
+
+    const bootstrapPassword = getEnvString("ADMIN_PASSWORD", "").trim();
+    if (bootstrapPassword) {
+      const adminEmail = String(getEnvString("ADMIN_EMAIL", "admin@localisa.com") || "").trim().toLowerCase();
+      const adminName = String(getEnvString("ADMIN_NAME", "Admin") || "").trim() || "Admin";
+      const now = new Date().toISOString();
+      db.prepare("UPDATE users SET role = 'user' WHERE role = 'admin' AND lower(email) <> lower(?)").run(adminEmail);
+      const existing = db.prepare("SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1").get(adminEmail);
+      const passwordHash = bcrypt.hashSync(bootstrapPassword, 10);
+      if (existing && existing.id) {
+        db.prepare(
+          "UPDATE users SET role = 'admin', password_hash = ?, email_verified = 1, email_verified_at = COALESCE(email_verified_at, ?), name = COALESCE(NULLIF(name, ''), ?) WHERE id = ?",
+        ).run(passwordHash, now, adminName, String(existing.id));
+      } else {
+        const id = crypto.randomBytes(16).toString("hex");
+        db.prepare(
+          "INSERT INTO users (id, email, password_hash, name, role, email_verified, email_verified_at, created_at) VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)",
+        ).run(id, adminEmail, passwordHash, adminName, now, now);
+      }
+    }
   })();
   return schemaReadyPromise;
 }

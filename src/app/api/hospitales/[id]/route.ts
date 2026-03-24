@@ -79,11 +79,12 @@ export async function GET(
           h.lng,
           h.coordenadas_fuente
         FROM hospitals h
-        WHERE h.id = ?
+        WHERE h.id = ? OR h.codigo_renipress_modular = ?
+        ORDER BY CASE WHEN h.id = ? THEN 0 ELSE 1 END
         LIMIT 1
       `,
       )
-      .get(id) as Record<string, unknown> | undefined;
+      .get(id, id, id) as Record<string, unknown> | undefined;
 
     if (!row) {
       return NextResponse.json({ error: { message: "Hospital no encontrado", status: 404 } }, { status: 404 });
@@ -117,6 +118,7 @@ export async function GET(
       return NextResponse.json(base, { status: 200 });
     }
 
+    const hospitalId = String(row.id || "");
     const offers = db
       .prepare(
         `
@@ -133,7 +135,7 @@ export async function GET(
         WHERE hospital_id = ?
       `,
       )
-      .all(id)
+      .all(hospitalId)
       .map((r) => {
         const o = r as Record<string, unknown>;
         return {

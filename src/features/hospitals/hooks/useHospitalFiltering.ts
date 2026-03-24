@@ -4,23 +4,18 @@ import * as React from "react";
 
 import { Hospital, HospitalFilters, HospitalMapItem } from "../types";
 
-function uniqueSorted(values: string[]) {
-  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
-}
-
 export function createInitialHospitalFilters(): HospitalFilters {
   return {
     profesion: null,
-    institucion: null,
-    departamento: null,
-    provincia: null,
-    distrito: null,
-    grado_dificultad: null,
-    categoria: null,
+    institucion: [],
+    departamento: [],
+    grado_dificultad: [],
+    categoria: [],
     zaf: null,
     ze: null,
     serums_periodo: null,
     serums_modalidad: null,
+    airport_hours_max: null,
   };
 }
 
@@ -33,45 +28,51 @@ function getApiBaseUrl() {
 function buildHospitalQuery(filters: HospitalFilters) {
   const params = new URLSearchParams();
 
-  const entries: Array<[keyof HospitalFilters, string]> = [
-    ["profesion", filters.profesion ?? ""],
-    ["institucion", filters.institucion ?? ""],
-    ["departamento", filters.departamento ?? ""],
-    ["provincia", filters.provincia ?? ""],
-    ["distrito", filters.distrito ?? ""],
-    ["grado_dificultad", filters.grado_dificultad ?? ""],
-    ["categoria", filters.categoria ?? ""],
-    ["zaf", filters.zaf ?? ""],
-    ["ze", filters.ze ?? ""],
-    ["serums_periodo", filters.serums_periodo ?? ""],
-    ["serums_modalidad", filters.serums_modalidad ?? ""],
-  ];
-
-  for (const [k, v] of entries) {
-    const value = v.trim();
-    if (value.length > 0) params.set(String(k), value);
+  if (filters.profesion && filters.profesion.trim()) params.set("profesion", filters.profesion.trim());
+  if (Array.isArray(filters.institucion)) {
+    for (const v of filters.institucion) if (v && v.trim()) params.append("institucion", v.trim());
   }
+  if (Array.isArray(filters.departamento)) {
+    for (const v of filters.departamento) if (v && v.trim()) params.append("departamento", v.trim());
+  }
+  if (Array.isArray(filters.grado_dificultad)) {
+    for (const v of filters.grado_dificultad) if (v && v.trim()) params.append("grado_dificultad", v.trim());
+  }
+  if (Array.isArray(filters.categoria)) {
+    for (const v of filters.categoria) if (v && v.trim()) params.append("categoria", v.trim());
+  }
+  if (filters.zaf && filters.zaf.trim()) params.set("zaf", filters.zaf.trim());
+  if (filters.ze && filters.ze.trim()) params.set("ze", filters.ze.trim());
+  if (filters.serums_periodo && filters.serums_periodo.trim()) params.set("serums_periodo", filters.serums_periodo.trim());
+  if (filters.serums_modalidad && filters.serums_modalidad.trim()) params.set("serums_modalidad", filters.serums_modalidad.trim());
+  if (filters.airport_hours_max != null) params.set("airport_hours_max", String(filters.airport_hours_max));
 
   const qs = params.toString();
   return qs.length > 0 ? `?${qs}` : "";
 }
 
+type FacetGroup = {
+  values: string[];
+  enabled: Record<string, boolean>;
+};
+
 type Options = {
-  profesiones: string[];
-  instituciones: string[];
-  departamentos: string[];
-  provincias: string[];
-  distritos: string[];
-  grados_dificultad: string[];
-  categorias: string[];
-  zaf: string[];
-  ze: string[];
+  departamentos: FacetGroup;
+  instituciones: FacetGroup;
+  grados_dificultad: FacetGroup;
+  categorias: FacetGroup;
 };
 
 export function useHospitalFiltering() {
   const [filters, setFilters] = React.useState<HospitalFilters>(createInitialHospitalFilters());
   const [hospitals, setHospitals] = React.useState<HospitalMapItem[]>([]);
   const [allHospitals, setAllHospitals] = React.useState<HospitalMapItem[] | null>(null);
+  const [options, setOptions] = React.useState<Options>({
+    departamentos: { values: [], enabled: {} },
+    instituciones: { values: [], enabled: {} },
+    grados_dificultad: { values: [], enabled: {} },
+    categorias: { values: [], enabled: {} },
+  });
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -101,6 +102,22 @@ export function useHospitalFiltering() {
     [apiBase],
   );
 
+  const fetchFacets = React.useCallback(
+    async (qs: string, signal: AbortSignal) => {
+      const r = await fetch(`${apiBase}/hospitales/facets${qs}`, { signal });
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        const message =
+          body && typeof body === "object" && body.error && body.error.message
+            ? String(body.error.message)
+            : "Error al cargar opciones de filtros";
+        throw new Error(message);
+      }
+      return (await r.json()) as Options;
+    },
+    [apiBase],
+  );
+
   React.useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -110,7 +127,14 @@ export function useHospitalFiltering() {
       .then((data) => {
         setAllHospitals(data);
         setHospitals(data);
-        setLoading(false);
+        return fetchFacets("", controller.signal)
+          .then((f) => {
+            setOptions(f);
+            setLoading(false);
+          })
+          .catch(() => {
+            setLoading(false);
+          });
       })
       .catch((e) => {
         if (e && e.name === "AbortError") return;
@@ -119,56 +143,42 @@ export function useHospitalFiltering() {
       });
 
     return () => controller.abort();
-  }, [apiBase, fetchHospitalsMap]);
+  }, [apiBase, fetchHospitalsMap, fetchFacets]);
 
   React.useEffect(() => {
     if (!allHospitals) return;
     const qs = buildHospitalQuery(filters);
-    if (!qs) {
-      setHospitals(allHospitals);
-      setError(null);
-      setLoading(false);
-      return;
-    }
     const controller = new AbortController();
     setLoading(true);
     setError(null);
 
-    fetchHospitalsMap(qs, controller.signal)
-      .then((data) => {
-        setHospitals(data);
+    const pHospitals = qs
+      ? fetchHospitalsMap(qs, controller.signal).then((data) => setHospitals(data))
+      : Promise.resolve().then(() => setHospitals(allHospitals));
+
+    const pFacets = fetchFacets(qs, controller.signal).then((f) => setOptions(f));
+
+    Promise.allSettled([pHospitals, pFacets])
+      .then((results) => {
+        const errors = results
+          .filter((r) => r.status === "rejected")
+          .map((r) => (r.status === "rejected" ? r.reason : null))
+          .filter(Boolean);
+        if (errors.length > 0) {
+          const first = errors[0];
+          setError(first instanceof Error ? first.message : "Error al filtrar establecimientos");
+        } else {
+          setError(null);
+        }
         setLoading(false);
       })
-      .catch((e) => {
-        if (e && e.name === "AbortError") return;
-        setError(e instanceof Error ? e.message : "Error al filtrar establecimientos");
+      .catch(() => {
+        setError("Error al filtrar establecimientos");
         setLoading(false);
       });
 
     return () => controller.abort();
-  }, [allHospitals, fetchHospitalsMap, filters]);
-
-  const options: Options = React.useMemo(() => {
-    const base = allHospitals ?? hospitals;
-    const allProfessions: string[] = [];
-    for (const h of base) {
-      const profs = Array.isArray(h.profesiones) && h.profesiones.length > 0 ? h.profesiones : [h.profesion];
-      for (const p of profs) {
-        if (p) allProfessions.push(p);
-      }
-    }
-    return {
-      profesiones: uniqueSorted(allProfessions),
-      instituciones: uniqueSorted(base.map((h) => h.institucion).filter(Boolean)),
-      departamentos: uniqueSorted(base.map((h) => h.departamento).filter(Boolean)),
-      provincias: uniqueSorted(base.map((h) => h.provincia).filter(Boolean)),
-      distritos: uniqueSorted(base.map((h) => h.distrito).filter(Boolean)),
-      grados_dificultad: uniqueSorted(base.map((h) => h.grado_dificultad).filter(Boolean)),
-      categorias: uniqueSorted(base.map((h) => h.categoria).filter(Boolean)),
-      zaf: uniqueSorted(base.map((h) => h.zaf).filter(Boolean)),
-      ze: uniqueSorted(base.map((h) => h.ze).filter(Boolean)),
-    };
-  }, [allHospitals, hospitals]);
+  }, [allHospitals, fetchFacets, fetchHospitalsMap, filters]);
 
   const fetchHospitalById = React.useCallback(
     async (id: string) => {

@@ -16,7 +16,7 @@ const variantClasses: Record<Variant, string> = {
   primary:
     "bg-[var(--accent)] text-white hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed",
   secondary:
-    "bg-white text-[var(--title)] border border-[var(--border)] hover:bg-black/[0.03] disabled:opacity-60 disabled:cursor-not-allowed",
+    "bg-white text-[var(--title)] hover:bg-black/[0.03] disabled:opacity-60 disabled:cursor-not-allowed",
   ghost:
     "bg-transparent text-[var(--title)] hover:bg-black/[0.03] disabled:opacity-60 disabled:cursor-not-allowed",
 };

@@ -15,7 +15,20 @@ async function routeController(req, res, next) {
 async function nearbyPlacesController(req, res, next) {
   try {
     const hospital = await getHospitalById(req.params.id);
-    const data = await getNearbyPlaces({ lat: hospital.lat, lon: hospital.lng });
+    const radiusMetersRaw = req.query.radius_meters != null ? String(req.query.radius_meters) : "";
+    const radiusMeters = Number(radiusMetersRaw);
+    const radius =
+      Number.isFinite(radiusMeters) && radiusMeters > 0 ? Math.max(200, Math.min(20_000, Math.round(radiusMeters))) : undefined;
+
+    const typesRaw = req.query.types != null ? String(req.query.types) : "";
+    const types = typesRaw
+      ? typesRaw
+          .split(",")
+          .map((t) => String(t || "").trim().toLowerCase())
+          .filter(Boolean)
+      : null;
+
+    const data = await getNearbyPlaces({ lat: hospital.lat, lon: hospital.lng, radius, types });
     res.json({ id: hospital.id, ...data });
   } catch (e) {
     next(e);

@@ -5,12 +5,14 @@ const { hospitalsRouter } = require("./hospitalRoutes");
 const { authRouter } = require("./authRoutes");
 const { docsRouter } = require("./docsRoutes");
 const { osmRouter } = require("./osmRoutes");
+const { favoritesRouter } = require("./favoritesRoutes");
 
 const router = express.Router();
 
 router.use(healthRouter);
 router.use(hospitalsRouter);
 router.use(authRouter);
+router.use(favoritesRouter);
 router.use(osmRouter);
 router.use(docsRouter);
 

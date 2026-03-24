@@ -16,6 +16,10 @@ export type HospitalMapProps = {
   route: RouteResponse | null;
   routeLoading?: boolean;
   nearby: NearbyPlacesResponse | null;
+  nearbyPlaces?: Array<{ p: { id: string; name: string | null; lat: number; lon: number }; index: number }>;
+  hoveredNearbyId?: string | null;
+  selectedNearbyId?: string | null;
+  focusNearbyId?: string | null;
   nearbyLoading?: boolean;
   focus: { lat: number; lng: number; zoom?: number } | null;
 };
@@ -26,31 +30,39 @@ function formatAccuracy(meters: number) {
   return `${(meters / 1000).toFixed(1)} km`;
 }
 
-function categoriaColor(categoria: string) {
-  switch (categoria) {
-    case "I-4":
-      return "#8b5cf6";
-    case "I-3":
-      return "#2A7DE1";
-    case "I-2":
-      return "#2FBF71";
-    case "I-1":
-      return "#f59e0b";
-    default:
-      return "#64748b";
-  }
+function normalizeInstitution(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function institucionColor(institucion: string) {
-  const normalized = (institucion || "").toLowerCase();
-  if (normalized.includes("essalud")) return "#38BDF8";
-  if (normalized.includes("minsa")) return "#FBBF24";
-  if (normalized.includes("militar")) return "#16A34A";
-  if (normalized.includes("marina")) return "#1E40AF";
-  if (normalized.includes("polic")) return "#4ADE80";
-  if (normalized.includes("fap")) return "#94A3B8";
-  if (normalized.includes("minedu")) return "#FB923C";
-  return "#A78BFA";
+function institucionGroup(institucion: string) {
+  const v = normalizeInstitution(institucion);
+  if (v.includes("essalud")) return "essalud";
+  if (v.includes("minsa")) return "minsa";
+
+  const isFfaa =
+    v.includes("ffaa") ||
+    v.includes("ff.aa") ||
+    v.includes("fuerza aerea") ||
+    v.includes("aerea del peru") ||
+    v.includes("marina") ||
+    v.includes("policia") ||
+    v.includes("ejercito");
+  if (isFfaa) return "ffaa";
+
+  return "otros";
+}
+
+function institucionGroupColor(institucion: string) {
+  const g = institucionGroup(institucion);
+  if (g === "essalud") return "#38BDF8";
+  if (g === "minsa") return "#FBBF24";
+  if (g === "ffaa") return "#22C55E";
+  return "#EF4444";
 }
 
 function gdColor(gd: string) {
@@ -68,6 +80,15 @@ function categoriaNumber(categoria: string) {
   return m ? m[1] : "";
 }
 
+function categoriaScale(categoria: string) {
+  const n = categoriaNumber(categoria);
+  if (n === "1") return 1.0;
+  if (n === "2") return 1.06;
+  if (n === "3") return 1.12;
+  if (n === "4") return 1.18;
+  return 1.0;
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -77,7 +98,47 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-function createHouseDivIcon({
+function toTitleCase(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const minor = new Set([
+    "a",
+    "al",
+    "con",
+    "de",
+    "del",
+    "desde",
+    "e",
+    "el",
+    "en",
+    "la",
+    "las",
+    "lo",
+    "los",
+    "o",
+    "para",
+    "por",
+    "sin",
+    "sobre",
+    "u",
+    "y",
+  ]);
+
+  return raw
+    .split(/\s+/g)
+    .filter(Boolean)
+    .map((token, idx) => {
+      if (/^\d+$/.test(token)) return token;
+      if (/^[A-Z]{2,}(\.[A-Z]{1,})*\.?$/.test(token)) return token;
+      const lower = token.toLowerCase();
+      if (idx > 0 && minor.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
+
+function createMedicalPinDivIcon({
   institucion,
   categoria,
   gd,
@@ -94,29 +155,31 @@ function createHouseDivIcon({
   selected: boolean;
   showLabel: boolean;
 }) {
-  const fill = institucionColor(institucion);
+  const fill = institucionGroupColor(institucion);
   const dot = gdColor(gd);
   const cat = categoriaNumber(categoria);
   const safeLabel = escapeHtml(label || "");
 
+  const height = Math.round(size * 1.35);
+  const shadow = selected ? "0 6px 18px rgba(0,0,0,0.18)" : "0 4px 16px rgba(0,0,0,0.14)";
   const stroke = selected ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.92)";
-  const shadow = "0 2px 12px rgba(0,0,0,0.08)";
 
   const iconSvg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${height}" viewBox="0 0 24 32">
       <path
+        d="M12 0C6.5 0 2 4.5 2 10c0 7.6 10 22 10 22s10-14.4 10-22C22 4.5 17.5 0 12 0Z"
         fill="${fill}"
         stroke="${stroke}"
         stroke-width="1.5"
         stroke-linejoin="round"
-        d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5.5v-6.5h-3V21H5a1 1 0 0 1-1-1v-9.5Z"
       />
+      <path d="M12 6.5v8.5M7.75 10.75h8.5" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" />
     </svg>
   `;
 
   const html = `
     <div class="serums-marker-bounce" style="display:grid;gap:6px;place-items:center;transform-origin:50% 100%;">
-      <div style="position:relative;width:${size}px;height:${size}px;filter:drop-shadow(${shadow});">
+      <div style="position:relative;width:${size}px;height:${height}px;filter:drop-shadow(${shadow});">
         ${iconSvg}
         ${
           cat
@@ -132,7 +195,7 @@ function createHouseDivIcon({
                 display:grid;
                 place-items:center;
                 font-size:11px;
-                font-weight:700;
+                font-weight:800;
                 color:rgba(29,29,31,0.92);
               ">${cat}</div>`
             : ""
@@ -140,7 +203,7 @@ function createHouseDivIcon({
         <div style="
           position:absolute;
           left:-4px;
-          bottom:-4px;
+          bottom:8px;
           width:10px;
           height:10px;
           border-radius:9999px;
@@ -156,7 +219,7 @@ function createHouseDivIcon({
               border-radius:9999px;
               background:rgba(255,255,255,0.92);
               border:1px solid rgba(0,0,0,0.08);
-              box-shadow:${shadow};
+              box-shadow:0 2px 12px rgba(0,0,0,0.08);
               font-size:12px;
               font-weight:600;
               color:rgba(29,29,31,0.92);
@@ -172,9 +235,9 @@ function createHouseDivIcon({
   return L.divIcon({
     className: "",
     html,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size],
-    popupAnchor: [0, -size],
+    iconSize: [size, height],
+    iconAnchor: [size / 2, height],
+    popupAnchor: [0, -height],
   });
 }
 
@@ -212,6 +275,33 @@ function createPlaceIcon(color: string) {
     "></div>
   `;
 
+  return L.divIcon({
+    className: "",
+    html,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+function createNumberedPlaceIcon(index: number, highlighted: boolean) {
+  const size = highlighted ? 26 : 22;
+  const bg = highlighted ? "#0ea5e9" : "#111827";
+  const ring = highlighted ? "0 0 0 6px rgba(14,165,233,0.18), 0 10px 18px rgba(15,23,42,0.16)" : "0 0 0 4px rgba(15,23,42,0.10), 0 8px 16px rgba(15,23,42,0.12)";
+  const html = `
+    <div style="
+      width:${size}px;
+      height:${size}px;
+      border-radius:9999px;
+      background:${bg};
+      color:#fff;
+      display:grid;
+      place-items:center;
+      font-weight:800;
+      font-size:${highlighted ? 13 : 12}px;
+      box-shadow:${ring};
+      border:2px solid rgba(255,255,255,0.95);
+    ">${index}</div>
+  `;
   return L.divIcon({
     className: "",
     html,
@@ -265,7 +355,7 @@ function ClusteredHospitalsLayer({
   const markersByIdRef = React.useRef<Map<string, L.Marker>>(new Map());
   const prevSelectedRef = React.useRef<string | null>(null);
   const onSelectRef = React.useRef(onSelectHospital);
-  const zoomRef = React.useRef<number>(map.getZoom());
+  const [clusterReady, setClusterReady] = React.useState(false);
 
   React.useEffect(() => {
     onSelectRef.current = onSelectHospital;
@@ -287,7 +377,10 @@ function ClusteredHospitalsLayer({
 
     const cluster = L.markerClusterGroup({
       chunkedLoading: true,
-      disableClusteringAtZoom: 17,
+      chunkDelay: 30,
+      chunkInterval: 100,
+      animateAddingMarkers: true,
+      animate: true,
       removeOutsideVisibleBounds: true,
       showCoverageOnHover: false,
       spiderfyOnMaxZoom: false,
@@ -308,32 +401,31 @@ function ClusteredHospitalsLayer({
     const markersById = markersByIdRef.current;
     clusterRef.current = cluster;
     map.addLayer(cluster);
+    setClusterReady(true);
 
     return () => {
       map.removeLayer(cluster);
       cluster.clearLayers();
       clusterRef.current = null;
       markersById.clear();
+      setClusterReady(false);
     };
   }, [map]);
 
-  const resolveSize = React.useCallback((zoom: number) => {
-    if (zoom >= 14) return 32;
-    return 28;
-  }, []);
+  const resolveSize = React.useCallback(() => 36, []);
 
-  const resolveShowLabel = React.useCallback((zoom: number) => zoom >= 14, []);
+  const resolveShowLabel = React.useCallback((selected: boolean) => selected, []);
 
   const updateMarkerIcon = React.useCallback(
     (h: HospitalMapItem, selected: boolean) => {
-      const zoom = zoomRef.current;
-      const size = resolveSize(zoom);
-      const showLabel = resolveShowLabel(zoom);
-      return createHouseDivIcon({
+      const base = resolveSize();
+      const size = Math.round(base * categoriaScale(h.categoria));
+      const showLabel = resolveShowLabel(selected);
+      return createMedicalPinDivIcon({
         institucion: h.institucion,
         categoria: h.categoria,
         gd: h.grado_dificultad,
-        label: h.nombre_establecimiento,
+        label: toTitleCase(h.nombre_establecimiento),
         size,
         selected,
         showLabel,
@@ -342,34 +434,65 @@ function ClusteredHospitalsLayer({
     [resolveShowLabel, resolveSize],
   );
 
+  const buildPopupHtml = React.useCallback((h: HospitalMapItem) => {
+    const profesion = (Array.isArray(h.profesiones) && h.profesiones.length > 0 ? h.profesiones.join(" · ") : h.profesion) || "—";
+    const catRaw = String(h.categoria || "").trim();
+    const categoria = catRaw && catRaw !== "0" ? catRaw : "";
+    const gd = h.grado_dificultad || "—";
+    const meta = [profesion, categoria, gd].filter((x) => String(x || "").trim() !== "").join(" · ");
+    return `
+      <div style="display:grid;gap:4px;min-width:180px">
+        <div style="font-weight:650;font-size:14px;color:rgba(29,29,31,0.92)">${escapeHtml(toTitleCase(h.nombre_establecimiento) || "—")}</div>
+        <div style="font-weight:520;font-size:12px;color:rgba(134,134,139,0.95)">${escapeHtml(meta || "—")}</div>
+        <div style="font-weight:520;font-size:12px;color:rgba(134,134,139,0.95)">${escapeHtml(h.departamento || "—")} · ${escapeHtml(h.provincia || "—")} · ${escapeHtml(h.distrito || "—")}</div>
+      </div>
+    `;
+  }, []);
+
   React.useEffect(() => {
     const cluster = clusterRef.current;
     if (!cluster) return;
+    if (!map.hasLayer(cluster)) return;
+    if (!clusterReady) return;
 
-    cluster.clearLayers();
-    markersByIdRef.current.clear();
-    prevSelectedRef.current = null;
+    const markersById = markersByIdRef.current;
+    const nextIds = new Set(hospitals.map((h) => h.id));
 
-    for (const h of hospitals) {
-      const marker = L.marker([h.lat, h.lng], {
-        icon: updateMarkerIcon(h, false),
-      });
-
-      marker.on("click", () => onSelectRef.current(h));
-
-      const popupHtml = `
-        <div style="display:grid;gap:4px;min-width:180px">
-          <div style="font-weight:650;font-size:14px;color:rgba(29,29,31,0.92)">${escapeHtml(h.nombre_establecimiento || "—")}</div>
-          <div style="font-weight:520;font-size:12px;color:rgba(134,134,139,0.95)">${escapeHtml((Array.isArray(h.profesiones) && h.profesiones.length > 0 ? h.profesiones.join(" · ") : h.profesion) || "—")} · ${escapeHtml(h.categoria || "—")} · ${escapeHtml(h.grado_dificultad || "—")}</div>
-          <div style="font-weight:520;font-size:12px;color:rgba(134,134,139,0.95)">${escapeHtml(h.departamento || "—")} · ${escapeHtml(h.provincia || "—")} · ${escapeHtml(h.distrito || "—")}</div>
-        </div>
-      `;
-      marker.bindPopup(popupHtml);
-
-      markersByIdRef.current.set(h.id, marker);
-      cluster.addLayer(marker);
+    for (const [id, marker] of markersById) {
+      if (nextIds.has(id)) continue;
+      cluster.removeLayer(marker);
+      marker.off();
+      markersById.delete(id);
     }
-  }, [hospitals, updateMarkerIcon]);
+
+    const toAdd: L.Marker[] = [];
+    for (const h of hospitals) {
+      const existing = markersById.get(h.id);
+      if (existing) {
+        const ll = existing.getLatLng();
+        if (ll.lat !== h.lat || ll.lng !== h.lng) existing.setLatLng([h.lat, h.lng]);
+        continue;
+      }
+
+      const marker = L.marker([h.lat, h.lng], { icon: updateMarkerIcon(h, false) });
+      marker.on("click", () => onSelectRef.current(h));
+      marker.bindPopup(buildPopupHtml(h));
+      markersById.set(h.id, marker);
+      toAdd.push(marker);
+    }
+
+    if (toAdd.length) cluster.addLayers(toAdd);
+
+    if (selectedHospitalId) {
+      const marker = markersById.get(selectedHospitalId);
+      const hospital = hospitalsById.get(selectedHospitalId);
+      if (marker && hospital) marker.setIcon(updateMarkerIcon(hospital, true));
+    }
+
+    if (prevSelectedRef.current && !markersById.has(prevSelectedRef.current)) {
+      prevSelectedRef.current = null;
+    }
+  }, [buildPopupHtml, hospitals, hospitalsById, selectedHospitalId, updateMarkerIcon, map, clusterReady]);
 
   React.useEffect(() => {
     const prev = prevSelectedRef.current;
@@ -395,26 +518,6 @@ function ClusteredHospitalsLayer({
     prevSelectedRef.current = next;
   }, [hospitalsById, selectedHospitalId, updateMarkerIcon]);
 
-  React.useEffect(() => {
-    const cluster = clusterRef.current;
-    if (!cluster) return;
-
-    const onZoom = () => {
-      zoomRef.current = map.getZoom();
-      for (const [id, marker] of markersByIdRef.current) {
-        const h = hospitalsById.get(id);
-        if (!h) continue;
-        const selected = id === selectedHospitalId;
-        marker.setIcon(updateMarkerIcon(h, selected));
-      }
-    };
-
-    map.on("zoomend", onZoom);
-    return () => {
-      map.off("zoomend", onZoom);
-    };
-  }, [hospitalsById, map, selectedHospitalId, updateMarkerIcon]);
-
   return null;
 }
 
@@ -427,6 +530,10 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
   route,
   routeLoading = false,
   nearby,
+  nearbyPlaces,
+  hoveredNearbyId = null,
+  selectedNearbyId = null,
+  focusNearbyId = null,
   nearbyLoading = false,
   focus,
 }: HospitalMapProps) {
@@ -456,6 +563,21 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
       ? Math.max(10, Math.min(20000, userLocation.accuracy))
       : null;
 
+  const placeMarkersRef = React.useRef<Map<string, L.Marker>>(new Map());
+
+  const MapEffects = () => {
+    const map = useMap();
+    React.useEffect(() => {
+      if (!focusNearbyId) return;
+      const m = placeMarkersRef.current.get(focusNearbyId);
+      if (!m) return;
+      const ll = m.getLatLng();
+      map.setView(ll, Math.max(map.getZoom(), 16), { animate: true });
+      m.openPopup();
+    }, [focusNearbyId, map]);
+    return null;
+  };
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-white">
       {loadingLabel ? (
@@ -478,7 +600,7 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
         <ZoomControl position="bottomright" />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          url="/api/tiles/{z}/{x}/{y}"
         />
 
         <FocusController focus={focus} />
@@ -507,31 +629,51 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           onSelectHospital={onSelectHospital}
         />
 
-        {nearby
-          ? [
-              ...nearby.hospedajes.map((p) => ({ p, icon: iconHospedajes, key: `hosp-${p.id}` })),
-              ...nearby.restaurantes.map((p) => ({ p, icon: iconRestaurantes, key: `rest-${p.id}` })),
-              ...nearby.farmacias.map((p) => ({ p, icon: iconFarmacias, key: `farm-${p.id}` })),
-              ...nearby.tiendas.map((p) => ({ p, icon: iconTiendas, key: `tienda-${p.id}` })),
-              ...nearby.comisarias.map((p) => ({ p, icon: iconComisarias, key: `com-${p.id}` })),
-            ].map(({ p, icon, key }) => (
-              <Marker key={key} position={[p.lat, p.lon]} icon={icon}>
-                <Popup>
-                  <div className="grid gap-1">
-                    <div className="text-sm font-bold">{p.name || "Lugar"}</div>
-                    <div className="text-xs text-slate-600">
-                      {String(
-                        (p.tags as Record<string, unknown>)["amenity"] ||
-                          (p.tags as Record<string, unknown>)["tourism"] ||
-                          (p.tags as Record<string, unknown>)["shop"] ||
-                          "",
-                      )}
+        {nearbyPlaces && nearbyPlaces.length > 0
+          ? nearbyPlaces.map(({ p, index }) => {
+              const highlighted = hoveredNearbyId === p.id || selectedNearbyId === p.id;
+              const icon = createNumberedPlaceIcon(index, highlighted);
+              return (
+                <Marker
+                  key={`near-${p.id}`}
+                  position={[p.lat, p.lon]}
+                  icon={icon}
+                  ref={(ref) => {
+                    const mapRef = placeMarkersRef.current;
+                    if (!ref) {
+                      mapRef.delete(p.id);
+                      return;
+                    }
+                    mapRef.set(p.id, ref);
+                  }}
+                >
+                  <Popup>
+                    <div className="grid gap-1">
+                      <div className="text-sm font-bold">{p.name || "Lugar"}</div>
                     </div>
-                  </div>
-                </Popup>
-              </Marker>
-            ))
-          : null}
+                  </Popup>
+                </Marker>
+              );
+            })
+          : nearby
+            ? [
+                ...nearby.hospedajes.map((p) => ({ p, icon: iconHospedajes, key: `hosp-${p.id}` })),
+                ...nearby.restaurantes.map((p) => ({ p, icon: iconRestaurantes, key: `rest-${p.id}` })),
+                ...nearby.farmacias.map((p) => ({ p, icon: iconFarmacias, key: `farm-${p.id}` })),
+                ...nearby.tiendas.map((p) => ({ p, icon: iconTiendas, key: `tienda-${p.id}` })),
+                ...nearby.comisarias.map((p) => ({ p, icon: iconComisarias, key: `com-${p.id}` })),
+              ].map(({ p, icon, key }) => (
+                <Marker key={key} position={[p.lat, p.lon]} icon={icon}>
+                  <Popup>
+                    <div className="grid gap-1">
+                      <div className="text-sm font-bold">{p.name || "Lugar"}</div>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))
+            : null}
+
+        <MapEffects />
       </MapContainer>
     </div>
   );

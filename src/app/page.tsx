@@ -6,8 +6,10 @@ import { FiltersBar } from "@/features/hospitals/components/FiltersBar";
 import { HospitalDetailPanel } from "@/features/hospitals/components/HospitalDetailPanel";
 import { useHospitalFiltering } from "@/features/hospitals/hooks/useHospitalFiltering";
 import {
+  FavoriteItem,
   Hospital,
   HospitalMapItem,
+  NearbyPlace,
   NearbyPlacesResponse,
   NearestAirportResponse,
   NominatimResult,
@@ -15,7 +17,7 @@ import {
 } from "@/features/hospitals/types";
 import { HospitalMap } from "@/features/map/components/HospitalMap";
 import { AppHeader } from "@/features/shell/components/AppHeader";
-import { getAuthToken } from "@/features/auth/token";
+import { getAuthEmailFromToken, getAuthRole, getAuthToken, setAuthRole as persistAuthRole } from "@/features/auth/token";
 import { AuthModal } from "@/features/auth/components/AuthModal";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
@@ -34,19 +36,47 @@ function geolocationErrorMessage(err: unknown) {
   return "No se pudo obtener tu ubicación.";
 }
 
-function MapLegendCard() {
+type LegendGroups = { essalud: boolean; minsa: boolean; ffaa: boolean; otros: boolean };
+
+type PendingFavorite =
+  | { item_type: "hospital"; item_id: string }
+  | { item_type: "place"; item_id: string; name: string | null; lat: number; lon: number; meta: { group: string } };
+
+function MapLegendCard({
+  groups,
+  onToggle,
+}: {
+  groups: LegendGroups;
+  onToggle: (key: keyof LegendGroups) => void;
+}) {
   const [open, setOpen] = React.useState(false);
   const [helpOpen, setHelpOpen] = React.useState(false);
 
+  const LegendPin = React.useCallback(({ color }: { color: string }) => {
+    return (
+      <svg width="18" height="24" viewBox="0 0 24 32" aria-hidden="true">
+        <path
+          d="M12 0C6.5 0 2 4.5 2 10c0 7.6 10 22 10 22s10-14.4 10-22C22 4.5 17.5 0 12 0Z"
+          fill={color}
+          stroke="rgba(255,255,255,0.92)"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+        <path d="M12 6.5v8.5M7.75 10.75h8.5" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+    );
+  }, []);
+
   const institutions = [
-    { label: "EsSalud", color: "#38BDF8" },
-    { label: "MINSA", color: "#FBBF24" },
-    { label: "Militar", color: "#16A34A" },
-    { label: "Marina", color: "#1E40AF" },
-    { label: "Policía", color: "#4ADE80" },
-    { label: "FAP", color: "#94A3B8" },
-    { label: "MINEDU", color: "#FB923C" },
-    { label: "Otros", color: "#A78BFA" },
+    { key: "essalud" as const, label: "EsSalud", color: "#38BDF8", description: "Hospitales de EsSalud" },
+    { key: "minsa" as const, label: "MINSA", color: "#FBBF24", description: "Hospitales de MINSA" },
+    {
+      key: "ffaa" as const,
+      label: "FF.AA",
+      color: "#22C55E",
+      description: "Sanidad FAP, Marina, PNP y Ejército",
+    },
+    { key: "otros" as const, label: "Otros", color: "#EF4444", description: "Todos los demás" },
   ];
 
   const clusterScale = [
@@ -67,16 +97,16 @@ function MapLegendCard() {
   const categorias = ["I-1", "I-2", "I-3", "I-4"];
 
   return (
-    <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white/95 shadow-[var(--shadow-soft)] backdrop-blur">
+    <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 shadow-[var(--shadow-soft)] backdrop-blur">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-4 py-3"
+        className="flex w-full items-center justify-between gap-3 px-5 py-4"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
         <div className="grid gap-0.5 text-left">
           <div className="text-sm font-semibold text-[var(--title)]">Leyenda</div>
-          <div className="text-xs font-medium text-[var(--label)]">Instituciones, categorías, GD y clusters</div>
+          <div className="text-xs font-medium text-[var(--label)]">Instituciones, categoría, GD y clusters</div>
         </div>
         <svg
           width="18"
@@ -97,33 +127,33 @@ function MapLegendCard() {
       </button>
 
       <div
-        className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
-        style={{ maxHeight: open ? 560 : 0, opacity: open ? 1 : 0 }}
+        className="transition-[max-height,opacity] duration-300 ease-out"
+        style={{ maxHeight: open ? "70vh" : 0, opacity: open ? 1 : 0, overflowY: open ? "scroll" : "hidden" }}
       >
-        <div className="grid gap-3 px-4 pb-4">
+        <div className="grid gap-3 px-5 pb-5 pr-4">
           <div className="grid gap-2">
             <div className="text-xs font-semibold text-[var(--title)]">Institución</div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-2">
               {institutions.map((i) => (
-                <label
+                <div
                   key={i.label}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-2 hover:bg-black/[0.04]"
+                  className="flex items-center justify-between gap-3 rounded-[var(--radius-card)] bg-[var(--background-secondary)] px-3 py-2"
                 >
-                  <span className="text-xs font-medium text-[var(--label)]">{i.label}</span>
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{ background: i.color }}
-                      aria-hidden="true"
-                    />
+                  <div className="grid min-w-0 gap-0.5">
+                    <div className="text-xs font-semibold text-[var(--title)]">{i.label}</div>
+                    <div className="text-[11px] font-medium text-[var(--label)]">{i.description}</div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="shrink-0">{LegendPin({ color: i.color })}</div>
                     <input
                       type="checkbox"
-                      defaultChecked
-                      className="h-4 w-4 rounded-full accent-[var(--accent)]"
+                      className="h-4 w-4 accent-[var(--accent)]"
                       aria-label={`Mostrar ${i.label}`}
+                      checked={groups[i.key]}
+                      onChange={() => onToggle(i.key)}
                     />
-                  </span>
-                </label>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -132,9 +162,9 @@ function MapLegendCard() {
             <div className="text-xs font-semibold text-[var(--title)]">Categoría</div>
             <div className="flex flex-wrap gap-2">
               {categorias.map((c) => (
-                <div key={c} className="flex items-center gap-2 rounded-full bg-black/[0.02] px-3 py-2">
+                <div key={c} className="flex items-center gap-2 rounded-full bg-[var(--background-secondary)] px-3 py-2">
                   <div className="grid h-5 w-5 place-items-center rounded-full bg-white shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                    <span className="text-[11px] font-semibold text-[var(--title)]">{c.replace("I-", "")}</span>
+                    <span className="text-[11px] font-extrabold text-[var(--title)]">{c.replace("I-", "")}</span>
                   </div>
                   <span className="text-xs font-medium text-[var(--label)]">{c}</span>
                 </div>
@@ -146,7 +176,7 @@ function MapLegendCard() {
             <div className="text-xs font-semibold text-[var(--title)]">Grado de dificultad (GD)</div>
             <div className="flex flex-wrap gap-2">
               {gdScale.map((g) => (
-                <div key={g.label} className="flex items-center gap-2 rounded-full bg-black/[0.02] px-3 py-2">
+                <div key={g.label} className="flex items-center gap-2 rounded-full bg-[var(--background-secondary)] px-3 py-2">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: g.color }} aria-hidden="true" />
                   <span className="text-xs font-medium text-[var(--label)]">{g.label}</span>
                 </div>
@@ -158,7 +188,10 @@ function MapLegendCard() {
             <div className="text-xs font-semibold text-[var(--title)]">Clusters</div>
             <div className="grid grid-cols-2 gap-2">
               {clusterScale.map((c) => (
-                <div key={c.label} className="flex items-center gap-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-2">
+                <div
+                  key={c.label}
+                  className="flex items-center gap-2 rounded-[var(--radius-card)] bg-[var(--background-secondary)] px-3 py-2"
+                >
                   <div
                     className="grid h-6 w-6 place-items-center rounded-full border-2 border-white text-[11px] font-semibold text-[var(--title)] shadow-[var(--shadow-soft)]"
                     style={{ background: c.color }}
@@ -182,15 +215,27 @@ function MapLegendCard() {
           </button>
 
           <div
-            className="overflow-hidden rounded-[var(--radius-card)] bg-black/[0.02] transition-[max-height,opacity] duration-300 ease-out"
-            style={{ maxHeight: helpOpen ? 220 : 0, opacity: helpOpen ? 1 : 0 }}
+            className="overflow-hidden rounded-[var(--radius-card)] bg-[var(--background-secondary)] transition-[max-height,opacity] duration-300 ease-out"
+            style={{ maxHeight: helpOpen ? 540 : 0, opacity: helpOpen ? 1 : 0 }}
           >
             <div className="grid gap-2 px-4 py-3">
               <div className="text-xs font-semibold text-[var(--title)]">Guía rápida</div>
-              <div className="text-xs font-medium text-[var(--label)]">
-                El color del marcador representa la institución. El número representa la categoría (I-1 a I-4). El punto
-                representa el GD (verde fácil, rojo difícil). Los clusters agrupan establecimientos según la cantidad.
-              </div>
+              <ul className="text-xs font-medium text-[var(--label)] list-disc pl-4">
+                <li>Color del pin: grupo institucional (EsSalud, MINSA, FF.AA, Otros).</li>
+                <li>Número en el pin: categoría por pisos (I-1 a I-4).</li>
+                <li>Punto en el pin: GD (GD‑1 fácil → GD‑5 muy difícil).</li>
+                <li>Clusters: agrupan establecimientos según cantidad (verde 1–10, amarillo 11–50, naranja 51–200, rojo 200+).</li>
+              </ul>
+              <div className="mt-2 text-xs font-semibold text-[var(--title)]">Definiciones</div>
+              <ul className="text-xs font-medium text-[var(--label)] list-disc pl-4">
+                <li>I‑1: Con profesional de salud, no médico (en teoría).</li>
+                <li>I‑2: Con médico.</li>
+                <li>I‑3: + odontólogo + técnicos + patología.</li>
+                <li>I‑4: + imágenes + internamiento.</li>
+                <li>GD‑1 a GD‑5: Grado de dificultad geográfica (GD‑5 = zona muy remota).</li>
+                <li>ZAF: Zona de Atención Focalizada (zona prioritaria).</li>
+                <li>ZE: Zona de Emergencia.</li>
+              </ul>
             </div>
           </div>
         </div>
@@ -203,9 +248,49 @@ function normalizeText(value: string) {
   return value
     .toLowerCase()
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function toTitleCase(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const minor = new Set([
+    "a",
+    "al",
+    "con",
+    "de",
+    "del",
+    "desde",
+    "e",
+    "el",
+    "en",
+    "la",
+    "las",
+    "lo",
+    "los",
+    "o",
+    "para",
+    "por",
+    "sin",
+    "sobre",
+    "u",
+    "y",
+  ]);
+
+  return raw
+    .split(/\s+/g)
+    .filter(Boolean)
+    .map((token, idx) => {
+      if (/^\d+$/.test(token)) return token;
+      if (/^[A-Z]{2,}(\.[A-Z]{1,})*\.?$/.test(token)) return token;
+      const lower = token.toLowerCase();
+      if (idx > 0 && minor.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
 }
 
 function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -242,8 +327,44 @@ export default function HomePage() {
   const apiBase = React.useMemo(() => {
     const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
     if (configured && configured.trim().length > 0) return configured.trim().replace(/\/$/, "");
-    return "/api";
+    return "http://localhost:4000/api";
   }, []);
+
+  const [legendGroups, setLegendGroups] = React.useState<LegendGroups>({
+    essalud: true,
+    minsa: true,
+    ffaa: true,
+    otros: true,
+  });
+
+  const normalizeInstitution = React.useCallback((value: string) => {
+    return String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }, []);
+
+  const groupInstitution = React.useCallback(
+    (institucion: string): keyof LegendGroups => {
+      const v = normalizeInstitution(institucion);
+      if (v.includes("essalud")) return "essalud";
+      if (v.includes("minsa")) return "minsa";
+      if (
+        v.includes("ffaa") ||
+        v.includes("ff.aa") ||
+        v.includes("fuerza aerea") ||
+        v.includes("aerea del peru") ||
+        v.includes("marina") ||
+        v.includes("policia") ||
+        v.includes("ejercito")
+      )
+        return "ffaa";
+      return "otros";
+    },
+    [normalizeInstitution],
+  );
 
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [selectedHospitalId, setSelectedHospitalId] = React.useState<string | null>(null);
@@ -255,17 +376,19 @@ export default function HomePage() {
   const [userLocation, setUserLocation] = React.useState<{ lat: number; lng: number; accuracy?: number | null } | null>(
     null,
   );
-  const [travelMode, setTravelMode] = React.useState<"carro" | "pie" | "avion">("carro");
+  const [travelMode, setTravelMode] = React.useState<"carro" | "avion">("carro");
+  const [routeOrigin, setRouteOrigin] = React.useState<
+    | { type: "user" }
+    | { type: "custom"; label: string; lat: number; lng: number }
+    | { type: "airport"; label: string; lat: number; lng: number }
+  >({ type: "user" });
   const [activeTrip, setActiveTrip] = React.useState<{
     hospitalId: string;
     hospitalName: string;
     lat: number;
     lng: number;
-    mode: "carro" | "pie" | "avion";
-    userLat: number;
-    userLng: number;
+    mode: "carro" | "avion";
   } | null>(null);
-  const [flightEstimate, setFlightEstimate] = React.useState<{ distancia: number; duracion: number } | null>(null);
   const [nearestAirport, setNearestAirport] = React.useState<NearestAirportResponse | null>(null);
   const [airportDriveRoute, setAirportDriveRoute] = React.useState<RouteResponse | null>(null);
   const [airportLoading, setAirportLoading] = React.useState(false);
@@ -283,6 +406,11 @@ export default function HomePage() {
   const [geocodeLoading, setGeocodeLoading] = React.useState(false);
   const [geocodeError, setGeocodeError] = React.useState<string | null>(null);
   const [geocodeMessage, setGeocodeMessage] = React.useState<string | null>(null);
+  const [nearbyFilterTypes, setNearbyFilterTypes] = React.useState<string[]>([]);
+  const [nearbyRadiusKm, setNearbyRadiusKm] = React.useState<number>(2);
+  const [hoveredNearbyId, setHoveredNearbyId] = React.useState<string | null>(null);
+  const [selectedNearbyId, setSelectedNearbyId] = React.useState<string | null>(null);
+  const [focusNearbyId, setFocusNearbyId] = React.useState<string | null>(null);
 
   const [searchValue, setSearchValue] = React.useState("");
   const [searchLoading, setSearchLoading] = React.useState(false);
@@ -293,6 +421,14 @@ export default function HomePage() {
 
   const [authOpen, setAuthOpen] = React.useState(false);
   const [authMode, setAuthMode] = React.useState<"login" | "register">("login");
+  const [authNonce, setAuthNonce] = React.useState(0);
+  const [authRole, setAuthRoleState] = React.useState<"admin" | "user" | null>(null);
+
+  const favoritesEnabled = React.useMemo(() => !!getAuthToken(), [authNonce]);
+  const [favorites, setFavorites] = React.useState<FavoriteItem[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = React.useState(false);
+  const [favoritesError, setFavoritesError] = React.useState<string | null>(null);
+  const [pendingFavorite, setPendingFavorite] = React.useState<PendingFavorite | null>(null);
 
   const setAuthQuery = React.useCallback((mode: "login" | "register" | null) => {
     if (typeof window === "undefined") return;
@@ -303,6 +439,128 @@ export default function HomePage() {
     window.history.replaceState({}, "", `${url.pathname}${next ? `?${next}` : ""}${url.hash}`);
   }, []);
 
+  const setHospitalQuery = React.useCallback((hospitalId: string | null) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (!hospitalId) url.searchParams.delete("h");
+    else url.searchParams.set("h", hospitalId);
+    const next = url.searchParams.toString();
+    window.history.replaceState({}, "", `${url.pathname}${next ? `?${next}` : ""}${url.hash}`);
+  }, []);
+
+  const openAuth = React.useCallback(
+    (mode: "login" | "register") => {
+      setAuthMode(mode);
+      setAuthOpen(true);
+      setAuthQuery(mode);
+    },
+    [setAuthQuery],
+  );
+
+  const extractApiErrorMessage = React.useCallback((body: unknown, fallback: string) => {
+    if (body && typeof body === "object" && "error" in body && body.error && typeof body.error === "object") {
+      const e = body.error as { message?: unknown };
+      if (typeof e.message === "string" && e.message.trim()) return e.message;
+    }
+    return fallback;
+  }, []);
+
+  const refreshFavorites = React.useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) {
+      setFavorites([]);
+      setFavoritesLoading(false);
+      setFavoritesError(null);
+      return;
+    }
+    setFavoritesLoading(true);
+    setFavoritesError(null);
+    try {
+      const r = await fetch(`${apiBase}/favoritos`, { headers: { Authorization: `Bearer ${token}` } });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo cargar favoritos."));
+      const list =
+        body && typeof body === "object" && "favorites" in body && Array.isArray((body as { favorites?: unknown }).favorites)
+          ? ((body as { favorites: FavoriteItem[] }).favorites as FavoriteItem[])
+          : [];
+      setFavorites(list);
+    } catch (e) {
+      setFavoritesError(e instanceof Error ? e.message : "No se pudo cargar favoritos.");
+    } finally {
+      setFavoritesLoading(false);
+    }
+  }, [apiBase, extractApiErrorMessage]);
+
+  const refreshAuthRole = React.useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) {
+      setAuthRoleState(null);
+      return;
+    }
+    const inferRole = () => {
+      const persisted = getAuthRole();
+      if (persisted) return persisted;
+      const email = getAuthEmailFromToken();
+      if (email && email.trim().toLowerCase() === "admin@localisa.com") return "admin";
+      return null;
+    };
+    try {
+      const r = await fetch(`${apiBase}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        setAuthRoleState(inferRole());
+        return;
+      }
+      const role =
+        body && typeof body === "object" && "user" in body && body.user && typeof body.user === "object" && "role" in body.user
+          ? String((body.user as { role?: unknown }).role || "")
+          : "";
+      const normalized = role.trim().toLowerCase() === "admin" ? "admin" : "user";
+      persistAuthRole(normalized);
+      setAuthRoleState(normalized);
+    } catch {
+      setAuthRoleState(inferRole());
+    }
+  }, [apiBase]);
+
+  const addFavorite = React.useCallback(
+    async (fav: PendingFavorite) => {
+      const token = getAuthToken();
+      if (!token) {
+        setPendingFavorite(fav);
+        openAuth("login");
+        return;
+      }
+      const r = await fetch(`${apiBase}/favoritos`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(fav),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo guardar favorito."));
+      await refreshFavorites();
+    },
+    [apiBase, extractApiErrorMessage, openAuth, refreshFavorites],
+  );
+
+  const removeFavorite = React.useCallback(
+    async ({ item_type, item_id }: { item_type: "hospital" | "place"; item_id: string }) => {
+      const token = getAuthToken();
+      if (!token) {
+        openAuth("login");
+        return;
+      }
+      const r = await fetch(`${apiBase}/favoritos/${encodeURIComponent(item_type)}/${encodeURIComponent(item_id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo quitar favorito."));
+      await refreshFavorites();
+    },
+    [apiBase, extractApiErrorMessage, openAuth, refreshFavorites],
+  );
+
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -312,6 +570,64 @@ export default function HomePage() {
       setAuthOpen(true);
     }
   }, []);
+
+  React.useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      setFavorites([]);
+      setFavoritesError(null);
+      setFavoritesLoading(false);
+      setAuthRoleState(null);
+      return;
+    }
+
+    let cancelled = false;
+    Promise.resolve()
+      .then(async () => {
+        setAuthRoleState(getAuthRole());
+        await refreshAuthRole();
+        if (pendingFavorite) {
+          await addFavorite(pendingFavorite);
+          if (cancelled) return;
+          setPendingFavorite(null);
+          return;
+        }
+        await refreshFavorites();
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setFavoritesError(e instanceof Error ? e.message : "No se pudo cargar favoritos.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [addFavorite, authNonce, pendingFavorite, refreshAuthRole, refreshFavorites]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const hospitalId = params.get("h");
+    if (!hospitalId) return;
+    setSelectedHospitalId(hospitalId);
+    setSelectedHospital(null);
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetailError(null);
+    fetchHospitalById(hospitalId)
+      .then((full) => {
+        setSelectedHospital(full);
+        if (Number.isFinite(full.lat) && Number.isFinite(full.lng)) {
+          setFocus({ lat: full.lat, lng: full.lng, zoom: 16 });
+        }
+      })
+      .catch((e) => {
+        setDetailError(e instanceof Error ? e.message : "Error al cargar detalle");
+      })
+      .finally(() => {
+        setDetailLoading(false);
+      });
+  }, [fetchHospitalById]);
 
   React.useEffect(() => {
     const mql = window.matchMedia("(min-width: 640px)");
@@ -328,6 +644,7 @@ export default function HomePage() {
       setSelectedHospital(null);
       setSelectedHospitalId(null);
       setDetailOpen(false);
+      setHospitalQuery(null);
     }
   }, [filteredHospitals, selectedHospitalId]);
 
@@ -499,35 +816,33 @@ export default function HomePage() {
     setRouteError(null);
     setLocationError(null);
     try {
-      const loc = await requestGeolocation();
-      setUserLocation(loc);
-
       if (travelMode === "avion") {
-        const distancia = haversineMeters(loc, { lat: selectedHospital.lat, lng: selectedHospital.lng });
-        const duracion = Math.max(60, Math.round(distancia / 222.2222222222));
         setRoute(null);
-        setFlightEstimate({ distancia, duracion });
         setNearestAirport(null);
         setAirportDriveRoute(null);
         setAirportError(null);
         setActiveTrip({
           hospitalId: selectedHospital.id,
-          hospitalName: selectedHospital.nombre_establecimiento,
+          hospitalName: toTitleCase(selectedHospital.nombre_establecimiento),
           lat: selectedHospital.lat,
           lng: selectedHospital.lng,
           mode: "avion",
-          userLat: loc.lat,
-          userLng: loc.lng,
         });
         if (approxWarning) setRouteError(approxWarning);
         setFocus(null);
         return;
       }
 
-      const perfil = travelMode === "pie" ? "walking" : "driving";
+      const origin =
+        routeOrigin.type === "user"
+          ? await requestGeolocation()
+          : { lat: routeOrigin.lat, lng: routeOrigin.lng, accuracy: null };
+      setUserLocation(origin);
+
+      const perfil = "driving";
       const qs = new URLSearchParams({
-        latUsuario: String(loc.lat),
-        lonUsuario: String(loc.lng),
+        latUsuario: String(origin.lat),
+        lonUsuario: String(origin.lng),
         latHospital: String(selectedHospital.lat),
         lonHospital: String(selectedHospital.lng),
         perfil,
@@ -550,18 +865,15 @@ export default function HomePage() {
       }
       const data = (await r.json()) as RouteResponse;
       setRoute(data);
-      setFlightEstimate(null);
       setNearestAirport(null);
       setAirportDriveRoute(null);
       setAirportError(null);
       setActiveTrip({
         hospitalId: selectedHospital.id,
-        hospitalName: selectedHospital.nombre_establecimiento,
+        hospitalName: toTitleCase(selectedHospital.nombre_establecimiento),
         lat: selectedHospital.lat,
         lng: selectedHospital.lng,
         mode: travelMode,
-        userLat: loc.lat,
-        userLng: loc.lng,
       });
       if (approxWarning) setRouteError(approxWarning);
       setFocus(null);
@@ -574,7 +886,7 @@ export default function HomePage() {
     } finally {
       setRouteLoading(false);
     }
-  }, [apiBase, requestGeolocation, selectedHospital, travelMode]);
+  }, [apiBase, requestGeolocation, routeOrigin, selectedHospital, travelMode]);
 
   React.useEffect(() => {
     if (!activeTrip) return;
@@ -650,7 +962,6 @@ export default function HomePage() {
     setActiveTrip(null);
     setRoute(null);
     setRouteError(null);
-    setFlightEstimate(null);
     setNearestAirport(null);
     setAirportDriveRoute(null);
     setAirportLoading(false);
@@ -681,11 +992,35 @@ export default function HomePage() {
     setNearbyError(null);
     try {
       if (approxWarning) setNearbyError(approxWarning);
+      setHoveredNearbyId(null);
+      setSelectedNearbyId(null);
+      setFocusNearbyId(null);
+
+      const typeKeyByLabel: Record<string, string> = {
+        "Hospedaje": "hospedajes",
+        "Restaurante/Chifa": "restaurantes",
+        "Centro Comercial": "centros_comerciales",
+        "Supermercado": "supermercados",
+        "Tambo/Bodega": "tiendas",
+        "Farmacia": "farmacias",
+        "Banco/Cajero": "bancos",
+        "Comisaría": "comisarias",
+        "Gimnasio": "gimnasios",
+        "Iglesia": "iglesias",
+      };
+      const types = nearbyFilterTypes
+        .map((t) => typeKeyByLabel[String(t || "").trim()] || "")
+        .filter(Boolean);
+      const qs = new URLSearchParams({
+        radius_meters: String(Math.round(nearbyRadiusKm * 1000)),
+        ...(types.length ? { types: types.join(",") } : {}),
+      }).toString();
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15_000);
       let r;
       try {
-        r = await fetch(`${apiBase}/lugares-cercanos/${encodeURIComponent(selectedHospital.id)}`, {
+        r = await fetch(`${apiBase}/lugares-cercanos/${encodeURIComponent(selectedHospital.id)}?${qs}`, {
           signal: controller.signal,
         });
       } finally {
@@ -713,7 +1048,7 @@ export default function HomePage() {
     } finally {
       setNearbyLoading(false);
     }
-  }, [apiBase, selectedHospital]);
+  }, [apiBase, nearbyFilterTypes, nearbyRadiusKm, selectedHospital]);
 
   const handleRequestGeocode = React.useCallback(async () => {
     if (!selectedHospital) return;
@@ -722,10 +1057,13 @@ export default function HomePage() {
       setGeocodeError("Inicia sesión para corregir la ubicación.");
       return;
     }
+    if (authRole !== "admin") {
+      setGeocodeError("Solo Admin puede corregir la ubicación.");
+      return;
+    }
     setGeocodeLoading(true);
     setGeocodeError(null);
     setGeocodeMessage(null);
-    setFlightEstimate(null);
     setNearestAirport(null);
     setAirportDriveRoute(null);
     setAirportError(null);
@@ -758,11 +1096,13 @@ export default function HomePage() {
       setSelectedHospital(full);
       setRoute(null);
       setRouteError(null);
-      setFlightEstimate(null);
       setNearestAirport(null);
       setAirportDriveRoute(null);
       setAirportError(null);
       setNearby(null);
+      setHoveredNearbyId(null);
+      setSelectedNearbyId(null);
+      setFocusNearbyId(null);
       setNearbyError(null);
       setGeocodeError(null);
       const moved =
@@ -791,7 +1131,7 @@ export default function HomePage() {
     } finally {
       setGeocodeLoading(false);
     }
-  }, [apiBase, selectedHospital]);
+  }, [apiBase, authRole, selectedHospital]);
 
   const handleSelectHospital = React.useCallback(
     async (h: HospitalMapItem) => {
@@ -800,8 +1140,14 @@ export default function HomePage() {
       setDetailOpen(true);
       setDetailLoading(true);
       setDetailError(null);
+      setHospitalQuery(h.id);
       setNearby(null);
       setNearbyError(null);
+      setNearbyFilterTypes([]);
+      setNearbyRadiusKm(2);
+      setHoveredNearbyId(null);
+      setSelectedNearbyId(null);
+      setFocusNearbyId(null);
       setGeocodeError(null);
       setGeocodeMessage(null);
       setFocus({ lat: h.lat, lng: h.lng, zoom: 16 });
@@ -817,7 +1163,7 @@ export default function HomePage() {
         setDetailLoading(false);
       }
     },
-    [fetchHospitalById],
+    [fetchHospitalById, setHospitalQuery],
   );
 
   const handleSelectHospitalSearchResult = React.useCallback(
@@ -840,8 +1186,12 @@ export default function HomePage() {
     return next;
   }, [filteredHospitals, selectedHospital]);
 
+  const hospitalsForMapAfterLegend = React.useMemo(() => {
+    return hospitalsForMap.filter((h) => legendGroups[groupInstitution(h.institucion)]);
+  }, [groupInstitution, hospitalsForMap, legendGroups]);
+
   const topHospitals = React.useMemo(() => {
-    const base = hospitalsForMap.slice();
+    const base = hospitalsForMapAfterLegend.slice();
     if (userLocation) {
       base.sort((a, b) => {
         const da = haversineMeters(userLocation, { lat: a.lat, lng: a.lng });
@@ -852,7 +1202,7 @@ export default function HomePage() {
     }
     base.sort((a, b) => a.nombre_establecimiento.localeCompare(b.nombre_establecimiento));
     return base.slice(0, 5);
-  }, [hospitalsForMap, userLocation]);
+  }, [hospitalsForMapAfterLegend, userLocation]);
 
   const directDistanceMeters = React.useMemo(() => {
     if (!selectedHospital || !userLocation) return null;
@@ -862,17 +1212,57 @@ export default function HomePage() {
 
   const activeTripSummary = React.useMemo(() => {
     if (!activeTrip) return null;
-    const label = activeTrip.mode === "pie" ? "A pie" : activeTrip.mode === "carro" ? "Carro" : "Avión";
+    const label = activeTrip.mode === "carro" ? "Carro" : "Avión";
     const metric =
       activeTrip.mode === "avion"
-        ? flightEstimate
-          ? `${formatDuration(flightEstimate.duracion)} · ${formatDistance(flightEstimate.distancia)}`
+        ? airportDriveRoute
+          ? `Desde aeropuerto: ${formatDistance(airportDriveRoute.distancia)} · ${formatDuration(airportDriveRoute.duracion)}`
           : null
         : route
           ? `${formatDuration(route.duracion)} · ${formatDistance(route.distancia)}`
           : null;
     return { label, metric };
-  }, [activeTrip, flightEstimate, route]);
+  }, [activeTrip, airportDriveRoute, route]);
+
+  const routeForMap = React.useMemo(() => {
+    if (activeTrip?.mode === "avion") return airportDriveRoute;
+    return route;
+  }, [activeTrip?.mode, airportDriveRoute, route]);
+
+  const nearbyFlatForList = React.useMemo(() => {
+    if (!nearby || !selectedHospital) return [];
+    const center = { lat: selectedHospital.lat, lng: selectedHospital.lng };
+    const rows: Array<{ p: NearbyPlace; group: string; dist: number }> = [];
+    const pushGroup = (arr: NearbyPlace[], group: string) => {
+      for (const p of arr) {
+        const dist = haversineMeters(center, { lat: p.lat, lng: p.lon });
+        rows.push({ p, group, dist });
+      }
+    };
+    pushGroup(nearby.hospedajes, "Hospedaje");
+    pushGroup(nearby.restaurantes, "Restaurante/Chifa");
+    pushGroup(nearby.centros_comerciales, "Centro Comercial");
+    pushGroup(nearby.supermercados, "Supermercado");
+    pushGroup(nearby.farmacias, "Farmacia");
+    pushGroup(nearby.tiendas, "Tambo/Bodega");
+    pushGroup(nearby.bancos, "Banco/Cajero");
+    pushGroup(nearby.comisarias, "Comisaría");
+    pushGroup(nearby.gimnasios, "Gimnasio");
+    pushGroup(nearby.iglesias, "Iglesia");
+
+    const typesSet = new Set(nearbyFilterTypes.map((s) => s.toLowerCase()));
+    const byType = rows.filter((r) => (typesSet.size ? typesSet.has(r.group.toLowerCase()) : true));
+    const byRadius = byType.filter((r) => r.dist <= nearbyRadiusKm * 1000);
+    byRadius.sort((a, b) => a.dist - b.dist);
+    return byRadius.map((r, i) => ({ ...r, index: i + 1 }));
+  }, [nearby, nearbyFilterTypes, nearbyRadiusKm, selectedHospital]);
+
+  const nearbyPlacesForMap = React.useMemo(() => {
+    return nearbyFlatForList.map(({ p, index }) => ({
+      p: { id: p.id, name: p.name || null, lat: p.lat, lon: p.lon },
+      index,
+    }));
+  }, [nearbyFlatForList]);
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-slate-50">
@@ -881,11 +1271,36 @@ export default function HomePage() {
         onOpenFilters={() => setSidebarOpen(true)}
         onCenterOnUser={handleCenterOnUser}
         centerOnUserLoading={centerOnUserLoading}
-        onOpenAuth={(mode) => {
-          setAuthMode(mode);
-          setAuthOpen(true);
-          setAuthQuery(mode);
+        onOpenAuth={openAuth}
+        favorites={favorites}
+        favoritesLoading={favoritesLoading}
+        favoritesError={favoritesError}
+        onRefreshFavorites={refreshFavorites}
+        onSelectFavorite={(fav) => {
+          if (fav.item_type === "hospital" && fav.hospital) {
+            const h: HospitalMapItem = {
+              id: fav.hospital.id,
+              profesion: fav.hospital.profesion || "",
+              profesiones: fav.hospital.profesiones || [],
+              institucion: fav.hospital.institucion || "",
+              departamento: fav.hospital.departamento || "",
+              provincia: fav.hospital.provincia || "",
+              distrito: fav.hospital.distrito || "",
+              grado_dificultad: fav.hospital.grado_dificultad || "",
+              codigo_renipress_modular: fav.hospital.codigo_renipress_modular || fav.hospital.id,
+              nombre_establecimiento: fav.hospital.nombre_establecimiento || fav.hospital.id,
+              categoria: fav.hospital.categoria || "",
+              zaf: fav.hospital.zaf || "",
+              ze: fav.hospital.ze || "",
+              lat: Number(fav.hospital.lat || 0),
+              lng: Number(fav.hospital.lng || 0),
+            };
+            handleSelectHospital(h);
+          } else if (fav.item_type === "place" && fav.lat != null && fav.lon != null) {
+            setFocus({ lat: fav.lat, lng: fav.lon, zoom: 16 });
+          }
         }}
+        onRemoveFavorite={(fav) => removeFavorite({ item_type: fav.item_type, item_id: fav.item_id })}
         searchValue={searchValue}
         searchLoading={searchLoading}
         searchError={searchError}
@@ -899,13 +1314,17 @@ export default function HomePage() {
 
       <div className="relative flex-1 overflow-hidden">
         <HospitalMap
-          hospitals={hospitalsForMap}
+          hospitals={hospitalsForMapAfterLegend}
           selectedHospitalId={selectedHospitalId}
           loading={loading}
           userLocation={userLocation}
-          route={route}
-          routeLoading={routeLoading}
+          route={routeForMap}
+          routeLoading={routeLoading || airportLoading}
           nearby={nearby}
+          nearbyPlaces={nearbyPlacesForMap}
+          hoveredNearbyId={hoveredNearbyId}
+          selectedNearbyId={selectedNearbyId}
+          focusNearbyId={focusNearbyId}
           nearbyLoading={nearbyLoading}
           focus={focus}
           onSelectHospital={handleSelectHospital}
@@ -913,9 +1332,9 @@ export default function HomePage() {
 
         <div className="absolute right-3 top-3 z-[1200] hidden sm:block">
           <div className="grid gap-2">
-            <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white/95 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur">
+            <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur">
               <div className="text-sm font-semibold text-[var(--title)]">
-                {loading ? "Cargando…" : `${hospitalsForMap.length} establecimientos`}
+                {loading ? "Cargando…" : `${hospitalsForMapAfterLegend.length} establecimientos`}
               </div>
               <div className="mt-1 text-xs font-medium text-[var(--label)]">
                 {error
@@ -928,10 +1347,15 @@ export default function HomePage() {
               </div>
             </div>
 
-            <MapLegendCard />
+            <MapLegendCard
+              groups={legendGroups}
+              onToggle={(key) => {
+                setLegendGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+              }}
+            />
 
             {activeTrip && activeTripSummary ? (
-              <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white/95 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur">
+              <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur">
                 <div className="text-[11px] font-semibold text-[var(--title)]">Ruta activa · {activeTripSummary.label}</div>
                 <div className="mt-0.5 line-clamp-1 text-xs font-medium text-[var(--label)]">{activeTrip.hospitalName}</div>
                 {activeTripSummary.metric ? (
@@ -950,7 +1374,7 @@ export default function HomePage() {
         <div className="absolute left-0 top-0 z-[2000] hidden h-full sm:block">
           <div
             className={cn(
-              "h-full w-[392px] p-3 transition-transform",
+              "h-full w-[392px] p-3 transition-transform duration-300 ease-out",
               sidebarOpen ? "translate-x-0" : "-translate-x-full",
             )}
           >
@@ -968,7 +1392,7 @@ export default function HomePage() {
           <button
             type="button"
             className={cn(
-              "absolute top-5 z-[2100] rounded-2xl border border-[var(--border)] bg-white px-2 py-2 text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]",
+              "absolute top-5 z-[2100] rounded-2xl bg-white px-2 py-2 text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]",
               sidebarOpen ? "left-[404px]" : "left-3",
             )}
             onClick={() => setSidebarOpen((v) => !v)}
@@ -995,12 +1419,12 @@ export default function HomePage() {
           aria-hidden={!sidebarOpen}
         >
           <div
-            className={cn("absolute inset-0 bg-slate-900/20 transition-opacity", sidebarOpen ? "opacity-100" : "opacity-0")}
+            className={cn("absolute inset-0 bg-black/20 transition-opacity", sidebarOpen ? "opacity-100" : "opacity-0")}
             onClick={() => setSidebarOpen(false)}
           />
           <div
             className={cn(
-              "absolute left-0 top-0 h-full w-[92%] max-w-[420px] p-3 transition-transform",
+              "absolute left-0 top-0 h-full w-[92%] max-w-[420px] p-3 transition-transform duration-300 ease-out",
               sidebarOpen ? "translate-x-0" : "-translate-x-full",
             )}
           >
@@ -1026,8 +1450,12 @@ export default function HomePage() {
         open={detailOpen}
         onClose={() => {
           setDetailOpen(false);
+          setHospitalQuery(null);
           setNearby(null);
           setNearbyError(null);
+          setHoveredNearbyId(null);
+          setSelectedNearbyId(null);
+          setFocusNearbyId(null);
         }}
         route={
           activeTrip && selectedHospital && activeTrip.hospitalId === selectedHospital.id && activeTrip.mode !== "avion"
@@ -1036,11 +1464,43 @@ export default function HomePage() {
         }
         routeLoading={routeLoading}
         routeError={activeTrip && selectedHospital && activeTrip.hospitalId === selectedHospital.id ? routeError : null}
-        flightEstimate={
-          activeTrip && selectedHospital && activeTrip.hospitalId === selectedHospital.id && activeTrip.mode === "avion"
-            ? flightEstimate
-            : null
-        }
+        apiBase={apiBase}
+        routeOrigin={routeOrigin}
+        onChangeRouteOrigin={(next) => setRouteOrigin(next)}
+        onUseNearestAirportAsOrigin={async () => {
+          if (!selectedHospital) return;
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15_000);
+            let r;
+            try {
+              r = await fetch(`${apiBase}/aeropuerto-cercano/${encodeURIComponent(selectedHospital.id)}`, {
+                signal: controller.signal,
+              });
+            } finally {
+              clearTimeout(timeoutId);
+            }
+            if (!r.ok) {
+              const body = await r.json().catch(() => null);
+              const message =
+                body && typeof body === "object" && body.error && body.error.message
+                  ? String(body.error.message)
+                  : "No se pudo obtener el aeropuerto cercano. Reintenta.";
+              throw new Error(message);
+            }
+            const data = (await r.json()) as NearestAirportResponse;
+            setNearestAirport(data);
+            if (!data.aeropuerto) throw new Error("No se encontró un aeropuerto cercano.");
+            setRouteOrigin({
+              type: "airport",
+              label: data.aeropuerto.name || "Aeropuerto",
+              lat: data.aeropuerto.lat,
+              lng: data.aeropuerto.lon,
+            });
+          } catch (e) {
+            setRouteError(e instanceof Error ? e.message : "No se pudo obtener el aeropuerto cercano. Reintenta.");
+          }
+        }}
         nearestAirport={
           activeTrip && selectedHospital && activeTrip.hospitalId === selectedHospital.id && activeTrip.mode === "avion"
             ? nearestAirport
@@ -1072,6 +1532,42 @@ export default function HomePage() {
         }}
         activeTripMode={activeTrip && selectedHospital && activeTrip.hospitalId === selectedHospital.id ? activeTrip.mode : null}
         directDistanceMeters={directDistanceMeters}
+        shareUrl={
+          selectedHospital
+            ? (() => {
+                if (typeof window === "undefined") return "";
+                const url = new URL(`/establecimiento/${encodeURIComponent(selectedHospital.id)}`, window.location.href);
+                return url.toString();
+              })()
+            : ""
+        }
+        nearbyFilters={{ types: nearbyFilterTypes, radiusKm: nearbyRadiusKm }}
+        canCorrectLocation={
+          authRole === "admin" ||
+          (() => {
+            const e = getAuthEmailFromToken();
+            return !!(e && e.trim().toLowerCase() === "admin@localisa.com");
+          })()
+        }
+        authRole={authRole}
+        onChangeNearbyFilters={(next) => {
+          setNearbyFilterTypes(next.types);
+          setNearbyRadiusKm(next.radiusKm);
+        }}
+        filteredNearby={nearbyFlatForList}
+        onHoverNearby={(id) => setHoveredNearbyId(id)}
+        onClickNearby={(id) => {
+          setSelectedNearbyId(id);
+          setFocusNearbyId(null);
+          Promise.resolve().then(() => setFocusNearbyId(id));
+        }}
+        onClearNearby={() => {
+          setNearby(null);
+          setNearbyError(null);
+          setHoveredNearbyId(null);
+          setSelectedNearbyId(null);
+          setFocusNearbyId(null);
+        }}
         nearby={nearby}
         nearbyLoading={nearbyLoading}
         nearbyError={nearbyError}
@@ -1081,6 +1577,31 @@ export default function HomePage() {
         onRequestRoute={selectedHospital ? handleRequestRoute : undefined}
         onRequestNearby={selectedHospital ? handleRequestNearby : undefined}
         onRequestGeocode={selectedHospital ? handleRequestGeocode : undefined}
+        favoritesEnabled={favoritesEnabled}
+        isHospitalFavorited={
+          !!(selectedHospital && favorites.some((f) => f.item_type === "hospital" && f.item_id === selectedHospital.id))
+        }
+        onToggleFavoriteHospital={() => {
+          if (!selectedHospital) return;
+          const exists = favorites.some((f) => f.item_type === "hospital" && f.item_id === selectedHospital.id);
+          if (exists) removeFavorite({ item_type: "hospital", item_id: selectedHospital.id });
+          else addFavorite({ item_type: "hospital", item_id: selectedHospital.id });
+        }}
+        onToggleFavoritePlace={(place, group) => {
+          const exists = favorites.some((f) => f.item_type === "place" && f.item_id === place.id);
+          if (exists) removeFavorite({ item_type: "place", item_id: place.id });
+          else
+            addFavorite({
+              item_type: "place",
+              item_id: place.id,
+              name: place.name || null,
+              lat: place.lat,
+              lon: place.lon,
+              meta: { group },
+            });
+        }}
+        isPlaceFavorited={(placeId) => favorites.some((f) => f.item_type === "place" && f.item_id === placeId)}
+        onRequestAuthForFavorites={() => openAuth("login")}
       />
 
       <AuthModal
@@ -1094,7 +1615,11 @@ export default function HomePage() {
           setAuthMode(m);
           setAuthQuery(m);
         }}
-        onAuthChange={() => {}}
+        onAuthChange={() => {
+          setAuthOpen(false);
+          setAuthQuery(null);
+          setAuthNonce((n) => n + 1);
+        }}
       />
     </div>
   );

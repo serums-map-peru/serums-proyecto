@@ -8,9 +8,24 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "SERUMS Map Perú",
+  title: "LISA",
   description:
     "Mapa interactivo para visualizar establecimientos donde realizar el SERUMS en Perú.",
+  icons: {
+    icon: "/LISApersonaje.png",
+  },
+  openGraph: {
+    title: "LISA",
+    description: "Mapa interactivo para visualizar establecimientos donde realizar el SERUMS en Perú.",
+    type: "website",
+    locale: "es_PE",
+    siteName: "LISA",
+  },
+  twitter: {
+    card: "summary",
+    title: "LISA",
+    description: "Mapa interactivo para visualizar establecimientos donde realizar el SERUMS en Perú.",
+  },
 };
 
 export default function RootLayout({

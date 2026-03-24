@@ -58,16 +58,15 @@ export type HospitalMapItem = {
 
 export type HospitalFilters = {
   profesion: string | null;
-  institucion: string | null;
-  departamento: string | null;
-  provincia: string | null;
-  distrito: string | null;
-  grado_dificultad: string | null;
-  categoria: string | null;
+  institucion: string[];
+  departamento: string[];
+  grado_dificultad: string[];
+  categoria: string[];
   zaf: string | null;
   ze: string | null;
   serums_periodo: string | null;
   serums_modalidad: string | null;
+  airport_hours_max?: number | null;
 };
 
 export type RouteResponse = {
@@ -94,6 +93,11 @@ export type NearbyPlacesResponse = {
   farmacias: NearbyPlace[];
   tiendas: NearbyPlace[];
   comisarias: NearbyPlace[];
+  gimnasios: NearbyPlace[];
+  bancos: NearbyPlace[];
+  iglesias: NearbyPlace[];
+  supermercados: NearbyPlace[];
+  centros_comerciales: NearbyPlace[];
 };
 
 export type NearestAirportResponse = {
@@ -101,6 +105,18 @@ export type NearestAirportResponse = {
   aeropuerto: NearbyPlace | null;
   distancia_meters: number | null;
   radius_meters: number;
+};
+
+export type FavoriteItem = {
+  id: string;
+  item_type: "hospital" | "place";
+  item_id: string;
+  name: string | null;
+  lat: number | null;
+  lon: number | null;
+  meta: unknown | null;
+  created_at: string | null;
+  hospital?: (HospitalMapItem & { lat: number | null; lng: number | null }) | null;
 };
 
 export type NominatimResult = {

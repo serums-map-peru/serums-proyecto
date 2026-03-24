@@ -34,7 +34,7 @@ function getVerificationSecret() {
 }
 
 function isEmailVerificationEnabled() {
-  return getEnvNumber("EMAIL_VERIFICATION_ENABLED", 1) !== 0;
+  return getEnvNumber("EMAIL_VERIFICATION_ENABLED", 0) !== 0;
 }
 
 function signToken(user) {
@@ -68,21 +68,29 @@ async function register({ email, password, name }) {
   const e = cleanEmail(email);
   const p = String(password || "");
   const n = typeof name === "string" ? name.trim() : "";
+  const adminEmail = cleanEmail(getEnvString("ADMIN_EMAIL", "admin@localisa.com"));
 
   if (!isValidEmailFormat(e)) throw new HttpError(400, "Email inválido");
   if (p.length < 8) throw new HttpError(400, "La contraseña debe tener al menos 8 caracteres");
+  if (!n) throw new HttpError(400, "Nombre y apellido son obligatorios");
 
   const existing = await userRepository.findUserByEmail(e);
   if (existing) throw new HttpError(409, "Este email ya está registrado");
 
+  const role = e === adminEmail ? "admin" : "user";
+  if (role === "admin") {
+    const adminCount = await userRepository.countAdmins();
+    if (adminCount > 0) throw new HttpError(409, "Ya existe un usuario Admin");
+  }
+
   const password_hash = await bcrypt.hash(p, 10);
-  const created = await userRepository.createUser({ email: e, password_hash, name: n || null });
+  const created = await userRepository.createUser({ email: e, password_hash, name: n || null, role });
   if (!created) throw new HttpError(500, "No se pudo crear el usuario");
 
   if (!isEmailVerificationEnabled()) {
     await userRepository.markEmailVerified(created.id);
     const token = signToken({ id: created.id, email: created.email });
-    return { token, user: { id: created.id, email: created.email, name: created.name, email_verified: true } };
+    return { token, user: { id: created.id, email: created.email, name: created.name, role: created.role, email_verified: true } };
   }
 
   const codeLength = getEnvNumber("EMAIL_VERIFICATION_CODE_LENGTH", 6);
@@ -98,7 +106,7 @@ async function register({ email, password, name }) {
   return {
     verification_required: true,
     email: e,
-    user: { id: created.id, email: created.email, name: created.name, email_verified: false },
+    user: { id: created.id, email: created.email, name: created.name, role: created.role, email_verified: false },
   };
 }
 
@@ -118,7 +126,7 @@ async function login({ email, password }) {
   if (!ok) throw new HttpError(401, "Credenciales inválidas");
 
   const token = signToken(found);
-  return { token, user: { id: found.id, email: found.email, name: found.name, email_verified: true } };
+  return { token, user: { id: found.id, email: found.email, name: found.name, role: found.role, email_verified: true } };
 }
 
 async function verifyEmail({ email, code }) {
@@ -199,7 +207,11 @@ async function resendVerification({ email }) {
 async function me(userId) {
   const user = await userRepository.findUserById(userId);
   if (!user) throw new HttpError(404, "Usuario no encontrado");
-  return { id: user.id, email: user.email, name: user.name, email_verified: !!user.email_verified };
+  const adminEmail = cleanEmail(getEnvString("ADMIN_EMAIL", "admin@localisa.com"));
+  const role =
+    (user.role && String(user.role).trim().toLowerCase()) ||
+    (user.email && cleanEmail(user.email) === adminEmail ? "admin" : "user");
+  return { id: user.id, email: user.email, name: user.name, role, email_verified: !!user.email_verified };
 }
 
 module.exports = { register, login, me, verifyEmail, resendVerification, getJwtSecret };

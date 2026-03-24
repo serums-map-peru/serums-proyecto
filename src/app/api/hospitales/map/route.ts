@@ -43,18 +43,18 @@ function tableExists(db: DatabaseSync, name: string) {
 
 export function GET(request: Request) {
   const url = new URL(request.url);
+  const getAllLower = (key: string) => url.searchParams.getAll(key).map((v) => safeLower(v)).filter(Boolean);
   const filters = {
     profesion: safeLower(url.searchParams.get("profesion") || ""),
-    institucion: safeLower(url.searchParams.get("institucion") || ""),
-    departamento: safeLower(url.searchParams.get("departamento") || ""),
-    provincia: safeLower(url.searchParams.get("provincia") || ""),
-    distrito: safeLower(url.searchParams.get("distrito") || ""),
-    grado_dificultad: safeLower(url.searchParams.get("grado_dificultad") || ""),
-    categoria: safeLower(url.searchParams.get("categoria") || ""),
+    institucion: getAllLower("institucion"),
+    departamento: getAllLower("departamento"),
+    grado_dificultad: getAllLower("grado_dificultad"),
+    categoria: getAllLower("categoria"),
     zaf: safeLower(url.searchParams.get("zaf") || ""),
     ze: safeLower(url.searchParams.get("ze") || ""),
     serums_periodo: String(url.searchParams.get("serums_periodo") || "").trim(),
     serums_modalidad: String(url.searchParams.get("serums_modalidad") || "").trim(),
+    airport_hours_max: Number(url.searchParams.get("airport_hours_max") || ""),
   };
 
   const db = openDb();
@@ -67,7 +67,7 @@ export function GET(request: Request) {
 
   try {
     const clauses: string[] = [];
-    const params: unknown[] = [];
+    const params: string[] = [];
 
     if (filters.profesion) {
       clauses.push(
@@ -75,29 +75,23 @@ export function GET(request: Request) {
       );
       params.push(filters.profesion, filters.profesion);
     }
-    if (filters.institucion) {
-      clauses.push("LOWER(COALESCE(h.institucion,'')) = ?");
-      params.push(filters.institucion);
+    if (Array.isArray(filters.institucion) && filters.institucion.length) {
+      clauses.push(`LOWER(COALESCE(h.institucion,'')) IN (${filters.institucion.map(() => "?").join(",")})`);
+      params.push(...filters.institucion);
     }
-    if (filters.departamento) {
-      clauses.push("LOWER(COALESCE(h.departamento,'')) = ?");
-      params.push(filters.departamento);
+    if (Array.isArray(filters.departamento) && filters.departamento.length) {
+      clauses.push(`LOWER(COALESCE(h.departamento,'')) IN (${filters.departamento.map(() => "?").join(",")})`);
+      params.push(...filters.departamento);
     }
-    if (filters.provincia) {
-      clauses.push("LOWER(COALESCE(h.provincia,'')) = ?");
-      params.push(filters.provincia);
+    if (Array.isArray(filters.grado_dificultad) && filters.grado_dificultad.length) {
+      clauses.push(
+        `LOWER(COALESCE(h.grado_dificultad,'')) IN (${filters.grado_dificultad.map(() => "?").join(",")})`,
+      );
+      params.push(...filters.grado_dificultad);
     }
-    if (filters.distrito) {
-      clauses.push("LOWER(COALESCE(h.distrito,'')) = ?");
-      params.push(filters.distrito);
-    }
-    if (filters.grado_dificultad) {
-      clauses.push("LOWER(COALESCE(h.grado_dificultad,'')) = ?");
-      params.push(filters.grado_dificultad);
-    }
-    if (filters.categoria) {
-      clauses.push("LOWER(COALESCE(h.categoria,'')) = ?");
-      params.push(filters.categoria);
+    if (Array.isArray(filters.categoria) && filters.categoria.length) {
+      clauses.push(`LOWER(COALESCE(h.categoria,'')) IN (${filters.categoria.map(() => "?").join(",")})`);
+      params.push(...filters.categoria);
     }
     if (filters.zaf) {
       clauses.push("LOWER(COALESCE(h.zaf,'')) = ?");
@@ -172,7 +166,130 @@ export function GET(request: Request) {
       };
     });
 
-    return NextResponse.json(mapped, { status: 200 });
+    const hoursMax = Number.isFinite(filters.airport_hours_max) ? Number(filters.airport_hours_max) : null;
+    if (!hoursMax || hoursMax <= 0) {
+      return NextResponse.json(mapped, { status: 200 });
+    }
+
+    function toRad(d: number) {
+      return (d * Math.PI) / 180;
+    }
+    function haversineMeters(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
+      const R = 6371000;
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lon - a.lon);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const sinDLat = Math.sin(dLat / 2);
+      const sinDLon = Math.sin(dLon / 2);
+      const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
+      return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+    }
+
+    const airportCache = new Map<string, { lat: number; lon: number } | null>();
+    function roundCoord(v: number) {
+      return Math.round(v * 10000) / 10000;
+    }
+
+    async function getNearestAirport(lat: number, lon: number) {
+      const key = `${roundCoord(lat)},${roundCoord(lon)}`;
+      if (airportCache.has(key)) return airportCache.get(key);
+      const radii = [30000, 80000, 160000, 250000, 350000];
+      const origin = { lat, lon };
+      for (const radius of radii) {
+        const query = `[out:json];
+(nwr(around:${radius},${lat},${lon})["aeroway"="aerodrome"];);
+out center;`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 18000);
+        try {
+          const res = await fetch("https://overpass-api.de/api/interpreter", {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+              accept: "application/json",
+              "user-agent": "SERUMS-Map-Peru/1.0",
+            },
+            body: `data=${encodeURIComponent(query)}`,
+            signal: controller.signal,
+          });
+          const body = await res.json().catch(() => null);
+          if (res.ok && body && Array.isArray(body.elements)) {
+            let best: { lat: number; lon: number } | null = null;
+            let bestD = Infinity;
+            for (const el of body.elements) {
+              const aLat =
+                typeof el.lat === "number" ? el.lat : el.center && typeof el.center.lat === "number" ? el.center.lat : null;
+              const aLon =
+                typeof el.lon === "number" ? el.lon : el.center && typeof el.center.lon === "number" ? el.center.lon : null;
+              if (aLat == null || aLon == null) continue;
+              const d = haversineMeters(origin, { lat: aLat, lon: aLon });
+              if (d < bestD) {
+                bestD = d;
+                best = { lat: aLat, lon: aLon };
+              }
+            }
+            if (best) {
+              airportCache.set(key, best);
+              clearTimeout(timeout);
+              return best;
+            }
+          }
+        } catch {
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+      airportCache.set(key, null);
+      return null;
+    }
+
+    const routeCache = new Map<string, number>();
+    function routeKey(aLon: number, aLat: number, bLon: number, bLat: number) {
+      return `${roundCoord(aLon)},${roundCoord(aLat)}->${roundCoord(bLon)},${roundCoord(bLat)}`;
+    }
+    async function osrmDurationSeconds(aLat: number, aLon: number, bLat: number, bLon: number) {
+      const key = routeKey(aLon, aLat, bLon, bLat);
+      if (routeCache.has(key)) return routeCache.get(key)!;
+      const url = `https://router.project-osrm.org/route/v1/driving/${aLon},${aLat};${bLon},${bLat}?overview=false`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const res = await fetch(url, { headers: { accept: "application/json" }, signal: controller.signal });
+        const body = await res.json().catch(() => null);
+        if (res.ok && body && body.code === "Ok" && Array.isArray(body.routes) && body.routes[0]) {
+          const seconds = Number(body.routes[0].duration);
+          if (Number.isFinite(seconds)) {
+            routeCache.set(key, seconds);
+            return seconds;
+          }
+        }
+      } catch {
+      } finally {
+        clearTimeout(timeout);
+      }
+      return Infinity;
+    }
+
+    const MAX_CONCURRENCY = 5;
+    const queue = mapped.slice();
+    const selected: typeof mapped = [];
+    const workers = Array.from({ length: Math.min(MAX_CONCURRENCY, queue.length) }, async () => {
+      while (queue.length) {
+        const h = queue.pop()!;
+        if (!Number.isFinite(h.lat) || !Number.isFinite(h.lng)) continue;
+        try {
+          const airport = await getNearestAirport(h.lat, h.lng);
+          if (!airport) continue;
+          const sec = await osrmDurationSeconds(h.lat, h.lng, airport.lat, airport.lon);
+          const hours = sec / 3600;
+          if (hours <= hoursMax) selected.push(h);
+        } catch {
+          // Ignorar fallas de servicios externos
+        }
+      }
+    });
+    return Promise.all(workers).then(() => NextResponse.json(selected, { status: 200 }));
   } catch {
     return NextResponse.json(
       { error: { message: "Error al cargar establecimientos.", status: 500 } },

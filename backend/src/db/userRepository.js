@@ -23,6 +23,7 @@ function normalizeUserRow(row) {
     email: String(row.email),
     password_hash: row.password_hash ? String(row.password_hash) : null,
     name: row.name ? String(row.name) : null,
+    role: row.role ? String(row.role) : "user",
     email_verified: emailVerified,
     email_verified_at: row.email_verified_at ? String(row.email_verified_at) : null,
     created_at: row.created_at ? String(row.created_at) : null,
@@ -31,31 +32,48 @@ function normalizeUserRow(row) {
 
 async function findUserByEmail(email) {
   const row = await queryOne(
-    "SELECT id, email, password_hash, name, email_verified, email_verified_at, created_at FROM users WHERE lower(email) = lower(?) LIMIT 1",
+    "SELECT id, email, password_hash, name, role, email_verified, email_verified_at, created_at FROM users WHERE lower(email) = lower(?) LIMIT 1",
     [String(email || "")],
   );
   return normalizeUserRow(row);
 }
 
 async function findUserById(id) {
-  const row = await queryOne("SELECT id, email, name, email_verified, email_verified_at, created_at FROM users WHERE id = ? LIMIT 1", [
-    String(id || ""),
-  ]);
+  const row = await queryOne(
+    "SELECT id, email, name, role, email_verified, email_verified_at, created_at FROM users WHERE id = ? LIMIT 1",
+    [String(id || "")],
+  );
   return normalizeUserRow(row);
 }
 
-async function createUser({ email, password_hash, name }) {
+async function createUser({ email, password_hash, name, role }) {
   const id = generateId();
   const created_at = nowIso();
-  const r = await execute("INSERT INTO users (id, email, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?)", [
+  const normalizedRole = role ? String(role) : "user";
+  const r = await execute("INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)", [
     id,
     String(email),
     String(password_hash),
     name ? String(name) : null,
+    normalizedRole,
     created_at,
   ]);
   if (!r || r.rowCount <= 0) return null;
-  return { id, email: String(email), name: name ? String(name) : null, email_verified: false, email_verified_at: null, created_at };
+  return {
+    id,
+    email: String(email),
+    name: name ? String(name) : null,
+    role: normalizedRole,
+    email_verified: false,
+    email_verified_at: null,
+    created_at,
+  };
+}
+
+async function countAdmins() {
+  const row = await queryOne("SELECT COUNT(*) AS n FROM users WHERE role = ?", ["admin"]);
+  const n = row && typeof row.n === "number" ? row.n : Number(row?.n || 0);
+  return Number.isFinite(n) ? n : 0;
 }
 
 async function markEmailVerified(userId) {
@@ -68,4 +86,4 @@ async function markEmailVerified(userId) {
   return (r.rowCount || 0) > 0;
 }
 
-module.exports = { findUserByEmail, findUserById, createUser, markEmailVerified };
+module.exports = { findUserByEmail, findUserById, createUser, countAdmins, markEmailVerified };

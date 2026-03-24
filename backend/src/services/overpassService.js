@@ -42,7 +42,12 @@ function groupKeyForElement(el) {
   if (tags.amenity === "restaurant") return "restaurantes";
   if (tags.amenity === "pharmacy") return "farmacias";
   if (tags.amenity === "police") return "comisarias";
-  if (tags.shop) return "tiendas";
+  if (tags.amenity === "bank" || tags.amenity === "atm") return "bancos";
+  if (tags.amenity === "place_of_worship" || tags.building === "church") return "iglesias";
+  if (tags.leisure === "fitness_centre" || tags.amenity === "fitness_centre" || tags.leisure === "sports_centre") return "gimnasios";
+  if (tags.shop === "supermarket") return "supermercados";
+  if (tags.shop === "mall" || tags.amenity === "marketplace") return "centros_comerciales";
+  if (tags.shop === "convenience" || tags.shop === "general" || tags.shop === "kiosk") return "tiendas";
 
   return null;
 }
@@ -85,24 +90,71 @@ function haversineMeters(a, b) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-async function getNearbyPlaces({ lat, lon, radius = 2000 }) {
+async function getNearbyPlaces({ lat, lon, radius = 2000, types = null }) {
   const latN = parseNumber(lat);
   const lonN = parseNumber(lon);
   if (latN == null || lonN == null) {
     throw new HttpError(500, "Hospital sin coordenadas válidas");
   }
 
-  const cacheKey = `${Math.round(latN * 10_000) / 10_000},${Math.round(lonN * 10_000) / 10_000},${radius}`;
+  const typesKey = Array.isArray(types) && types.length ? types.slice().sort().join(",") : "all";
+  const cacheKey = `${Math.round(latN * 10_000) / 10_000},${Math.round(lonN * 10_000) / 10_000},${radius},${typesKey}`;
   const cached = readCache(cacheKey);
   if (cached) return cached;
 
+  const wanted = new Set(
+    Array.isArray(types) && types.length
+      ? types.map((t) => String(t || "").trim().toLowerCase()).filter(Boolean)
+      : [
+          "hospedajes",
+          "restaurantes",
+          "centros_comerciales",
+          "supermercados",
+          "tiendas",
+          "farmacias",
+          "bancos",
+          "comisarias",
+          "gimnasios",
+          "iglesias",
+        ],
+  );
+
+  const lines = [];
+  if (wanted.has("hospedajes")) lines.push(`  node(around:${radius},${latN},${lonN})["tourism"="hotel"];`);
+  if (wanted.has("restaurantes")) lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="restaurant"];`);
+  if (wanted.has("farmacias")) lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="pharmacy"];`);
+  if (wanted.has("comisarias")) lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="police"];`);
+  if (wanted.has("bancos")) {
+    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="bank"];`);
+    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="atm"];`);
+  }
+  if (wanted.has("gimnasios")) {
+    lines.push(`  node(around:${radius},${latN},${lonN})["leisure"="fitness_centre"];`);
+    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="fitness_centre"];`);
+    lines.push(`  node(around:${radius},${latN},${lonN})["leisure"="sports_centre"];`);
+  }
+  if (wanted.has("iglesias")) {
+    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="place_of_worship"];`);
+    lines.push(`  node(around:${radius},${latN},${lonN})["building"="church"];`);
+  }
+  if (wanted.has("centros_comerciales")) {
+    lines.push(`  node(around:${radius},${latN},${lonN})["shop"="mall"];`);
+    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="marketplace"];`);
+  }
+  if (wanted.has("supermercados")) lines.push(`  node(around:${radius},${latN},${lonN})["shop"="supermarket"];`);
+  if (wanted.has("tiendas")) {
+    lines.push(`  node(around:${radius},${latN},${lonN})["shop"="convenience"];`);
+    lines.push(`  node(around:${radius},${latN},${lonN})["shop"="general"];`);
+    lines.push(`  node(around:${radius},${latN},${lonN})["shop"="kiosk"];`);
+  }
+
+  if (!lines.length) {
+    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="restaurant"];`);
+  }
+
   const query = `[out:json];
 (
-  node(around:${radius},${latN},${lonN})["tourism"="hotel"];
-  node(around:${radius},${latN},${lonN})["amenity"="restaurant"];
-  node(around:${radius},${latN},${lonN})["amenity"="pharmacy"];
-  node(around:${radius},${latN},${lonN})["shop"];
-  node(around:${radius},${latN},${lonN})["amenity"="police"];
+${lines.join("\n")}
 );
 out center;`;
 
@@ -151,6 +203,11 @@ out center;`;
     farmacias: [],
     tiendas: [],
     comisarias: [],
+    gimnasios: [],
+    bancos: [],
+    iglesias: [],
+    supermercados: [],
+    centros_comerciales: [],
   };
 
   const elements = body && Array.isArray(body.elements) ? body.elements : [];

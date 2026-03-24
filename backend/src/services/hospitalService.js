@@ -1039,12 +1039,26 @@ async function loadHospitalsFromDb() {
   return dbHospitalsCache;
 }
 
-function matchesFilter(fieldValue, filterValue) {
-  if (!filterValue) return true;
-  if (Array.isArray(fieldValue)) {
-    return fieldValue.some((v) => normalize(v) === normalize(filterValue));
+function toArrayQuery(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.map((v) => cleanString(String(v))).filter(Boolean);
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (!s) return [];
+    // soporta CSV "A,B,C"
+    return s.split(",").map((v) => cleanString(v)).filter(Boolean);
   }
-  return normalize(fieldValue) === normalize(filterValue);
+  return [];
+}
+
+function matchesAny(fieldValue, allowed) {
+  if (!allowed || allowed.length === 0) return true;
+  const normAllowed = new Set(allowed.map((v) => normalize(v)));
+  if (Array.isArray(fieldValue)) {
+    for (const v of fieldValue) if (normAllowed.has(normalize(v))) return true;
+    return false;
+  }
+  return normAllowed.has(normalize(fieldValue));
 }
 
 function summarizeOffers(offers) {
@@ -1076,29 +1090,57 @@ async function listHospitals(filters) {
   const store = DB_ENABLED ? await loadHospitalsFromDb() : await loadHospitalsFromCsv();
 
   const profesion = cleanString(filters.profesion);
-  const institucion = cleanString(filters.institucion);
-  const departamento = cleanString(filters.departamento);
-  const provincia = cleanString(filters.provincia);
+  const instituciones = toArrayQuery(filters.institucion);
+  const departamentos = toArrayQuery(filters.departamento);
+  const provincias = toArrayQuery(filters.provincia);
   const distrito = cleanString(filters.distrito);
-  const grado_dificultad = cleanString(filters.grado_dificultad);
-  const categoria = cleanString(filters.categoria);
+  const grados = toArrayQuery(filters.grado_dificultad);
+  const categorias = toArrayQuery(filters.categoria);
   const zaf = cleanString(filters.zaf);
   const ze = cleanString(filters.ze);
   const serums_periodo = cleanString(filters.serums_periodo);
   const serums_modalidad = cleanString(filters.serums_modalidad);
+  const airportHoursMax = Number(filters.airport_hours_max);
 
-  const base = store.records.filter((h) => {
-    if (!matchesFilter(h.profesion, profesion)) return false;
-    if (!matchesFilter(h.institucion, institucion)) return false;
-    if (!matchesFilter(h.departamento, departamento)) return false;
-    if (!matchesFilter(h.provincia, provincia)) return false;
-    if (!matchesFilter(h.distrito, distrito)) return false;
-    if (!matchesFilter(h.grado_dificultad, grado_dificultad)) return false;
-    if (!matchesFilter(h.categoria, categoria)) return false;
-    if (!matchesFilter(h.zaf, zaf)) return false;
-    if (!matchesFilter(h.ze, ze)) return false;
+  let base = store.records.filter((h) => {
+    if (!matchesAny(h.profesion, profesion ? [profesion] : [])) return false;
+    if (!matchesAny(h.institucion, instituciones)) return false;
+    if (!matchesAny(h.departamento, departamentos)) return false;
+    if (!matchesAny(h.provincia, provincias)) return false;
+    if (!matchesAny(h.distrito, distrito ? [distrito] : [])) return false;
+    if (!matchesAny(h.grado_dificultad, grados)) return false;
+    if (!matchesAny(h.categoria, categorias)) return false;
+    if (!matchesAny(h.zaf, zaf ? [zaf] : [])) return false;
+    if (!matchesAny(h.ze, ze ? [ze] : [])) return false;
     return true;
   });
+
+  // Filtro por tiempo máximo al aeropuerto (aprox. basado en distancia geodésica)
+  if (Number.isFinite(airportHoursMax) && airportHoursMax > 0) {
+    const { getNearestAirport } = require("./overpassService");
+    const MAX_CONCURRENCY = 5;
+    const queue = base.slice();
+    const results = [];
+    const workers = Array.from({ length: Math.min(MAX_CONCURRENCY, queue.length) }, async () => {
+      while (queue.length) {
+        const h = queue.pop();
+        if (!h) break;
+        if (!Number.isFinite(h.lat) || !Number.isFinite(h.lng)) continue;
+        try {
+          const nearest = await getNearestAirport({ lat: h.lat, lon: h.lng });
+          const dMeters = nearest && Number.isFinite(nearest.distancia_meters) ? nearest.distancia_meters : null;
+          if (dMeters == null) continue;
+          const km = dMeters / 1000;
+          const hours = km / 60; // ~60 km/h
+          if (hours <= airportHoursMax) results.push(h);
+        } catch {
+          // Ignorar errores de API; no incluir hospital si falla
+        }
+      }
+    });
+    await Promise.all(workers);
+    base = results;
+  }
 
   const requiresOfferFilter = !!serums_periodo || !!serums_modalidad;
   if (!requiresOfferFilter) return base;
@@ -1117,7 +1159,11 @@ async function listHospitals(filters) {
 async function getHospitalById(id) {
   if (DB_ENABLED) await ensureDbSeeded();
   const store = DB_ENABLED ? await loadHospitalsFromDb() : await loadHospitalsFromCsv();
-  const hospital = store.byId.get(String(id));
+  const key = String(id || "").trim();
+  let hospital = store.byId.get(key);
+  if (!hospital) {
+    hospital = store.records.find((h) => String(h && h.codigo_renipress_modular ? h.codigo_renipress_modular : "").trim() === key);
+  }
   if (!hospital) throw new HttpError(404, "Hospital no encontrado");
   if (!DB_ENABLED) return hospital;
 

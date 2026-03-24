@@ -3,12 +3,12 @@
 import * as React from "react";
 import Image from "next/image";
 
-import { Hospital, NearbyPlace, NearbyPlacesResponse, RouteResponse } from "@/features/hospitals/types";
+import { Hospital, NearbyPlace, NearbyPlacesResponse, NominatimResult, RouteResponse } from "@/features/hospitals/types";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
 import { Card } from "@/shared/ui/Card";
 
-type TravelMode = "carro" | "pie" | "avion";
+type TravelMode = "carro" | "avion";
 
 export type HospitalDetailPanelProps = {
   hospital: Hospital | null;
@@ -16,10 +16,23 @@ export type HospitalDetailPanelProps = {
   error?: string | null;
   open: boolean;
   onClose: () => void;
+  canCorrectLocation?: boolean;
+  authRole?: "admin" | "user" | null;
   route?: RouteResponse | null;
   routeLoading?: boolean;
   routeError?: string | null;
-  flightEstimate?: { distancia: number; duracion: number } | null;
+  apiBase: string;
+  routeOrigin:
+    | { type: "user" }
+    | { type: "custom"; label: string; lat: number; lng: number }
+    | { type: "airport"; label: string; lat: number; lng: number };
+  onChangeRouteOrigin: (
+    next:
+      | { type: "user" }
+      | { type: "custom"; label: string; lat: number; lng: number }
+      | { type: "airport"; label: string; lat: number; lng: number },
+  ) => void;
+  onUseNearestAirportAsOrigin?: () => void;
   nearestAirport?: NearbyPlace | null;
   nearestAirportDistanceMeters?: number | null;
   airportDriveRoute?: RouteResponse | null;
@@ -29,6 +42,7 @@ export type HospitalDetailPanelProps = {
   onChangeTravelMode: (mode: TravelMode) => void;
   activeTripMode?: TravelMode | null;
   directDistanceMeters?: number | null;
+  shareUrl: string;
   nearby?: NearbyPlacesResponse | null;
   nearbyLoading?: boolean;
   nearbyError?: string | null;
@@ -38,16 +52,19 @@ export type HospitalDetailPanelProps = {
   onRequestRoute?: () => void;
   onRequestNearby?: () => void;
   onRequestGeocode?: () => void;
+  nearbyFilters?: { types: string[]; radiusKm: number };
+  onChangeNearbyFilters?: (next: { types: string[]; radiusKm: number }) => void;
+  filteredNearby?: Array<{ p: NearbyPlace; group: string; dist: number; index: number }>;
+  onHoverNearby?: (id: string | null) => void;
+  onClickNearby?: (id: string) => void;
+  onClearNearby?: () => void;
+  favoritesEnabled?: boolean;
+  isHospitalFavorited?: boolean;
+  onToggleFavoriteHospital?: () => void;
+  onToggleFavoritePlace?: (place: NearbyPlace, group: string) => void;
+  isPlaceFavorited?: (placeId: string) => boolean;
+  onRequestAuthForFavorites?: () => void;
 };
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="grid gap-1">
-      <div className="text-xs font-semibold text-slate-500">{label}</div>
-      <div className="text-sm font-medium text-slate-900">{value}</div>
-    </div>
-  );
-}
 
 function formatDistance(meters: number) {
   if (!Number.isFinite(meters)) return "—";
@@ -70,11 +87,42 @@ function mapsUrlForPlace(p: NearbyPlace) {
 }
 
 function toTitleCase(value: string) {
-  return (value || "")
-    .toLowerCase()
-    .split(" ")
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const minor = new Set([
+    "a",
+    "al",
+    "con",
+    "de",
+    "del",
+    "desde",
+    "e",
+    "el",
+    "en",
+    "la",
+    "las",
+    "lo",
+    "los",
+    "o",
+    "para",
+    "por",
+    "sin",
+    "sobre",
+    "u",
+    "y",
+  ]);
+
+  return raw
+    .split(/\s+/g)
     .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .map((token, idx) => {
+      if (/^\d+$/.test(token)) return token;
+      if (/^[A-Z]{2,}(\.[A-Z]{1,})*\.?$/.test(token)) return token;
+      const lower = token.toLowerCase();
+      if (idx > 0 && minor.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
     .join(" ");
 }
 
@@ -87,14 +135,30 @@ function CloseIcon() {
   );
 }
 
-function HeartIcon() {
+function ShareIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
       <path
-        d="M20.3 7.6a4.6 4.6 0 0 0-6.5 0L12 9.4l-1.8-1.8a4.6 4.6 0 0 0-6.5 6.5l1.8 1.8L12 21l6.5-5.1 1.8-1.8a4.6 4.6 0 0 0 0-6.5Z"
+        d="M3 11l18-8-8 18-2-7-8-3z"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.6"
         strokeLinejoin="round"
+        strokeLinecap="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
+function HeartIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+      <path
+        d="M12 21s-6.3-4.3-8.8-8c-2.2-3.2-.6-7 3-7 1.9 0 3.4 1 4.3 2.4C11.4 7 12.9 6 14.8 6c3.6 0 5.2 3.8 3 7-2.5 3.7-8.8 8-8.8 8Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+        fill={filled ? "currentColor" : "none"}
       />
     </svg>
   );
@@ -111,20 +175,6 @@ function TravelIcon({ mode }: { mode: TravelMode }) {
           strokeLinejoin="round"
         />
         <path d="M21.5 5 12.1 16.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (mode === "pie") {
-    return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-        <path d="M13 5.5a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z" stroke="currentColor" strokeWidth="1.5" />
-        <path
-          d="M10.5 8.5 8.2 12.1c-.3.5-.3 1.1 0 1.6l2 3.3M12.4 9.2l3.1 2.2c.4.3.6.8.6 1.3V19M7 21l3-4M14 21l2-4"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
       </svg>
     );
   }
@@ -164,10 +214,15 @@ export function HospitalDetailPanel({
   error = null,
   open,
   onClose,
+  canCorrectLocation = false,
+  authRole = null,
   route = null,
   routeLoading = false,
   routeError = null,
-  flightEstimate = null,
+  apiBase,
+  routeOrigin,
+  onChangeRouteOrigin,
+  onUseNearestAirportAsOrigin,
   nearestAirport = null,
   nearestAirportDistanceMeters = null,
   airportDriveRoute = null,
@@ -177,6 +232,7 @@ export function HospitalDetailPanel({
   onChangeTravelMode,
   activeTripMode = null,
   directDistanceMeters = null,
+  shareUrl,
   nearby = null,
   nearbyLoading = false,
   nearbyError = null,
@@ -186,14 +242,40 @@ export function HospitalDetailPanel({
   onRequestRoute,
   onRequestNearby,
   onRequestGeocode,
+  nearbyFilters = { types: [], radiusKm: 2 },
+  onChangeNearbyFilters,
+  filteredNearby,
+  onHoverNearby,
+  onClickNearby,
+  onClearNearby,
+  favoritesEnabled = false,
+  isHospitalFavorited = false,
+  onToggleFavoriteHospital,
+  onToggleFavoritePlace,
+  isPlaceFavorited,
+  onRequestAuthForFavorites,
 }: HospitalDetailPanelProps) {
   const imageUrl = hospital && hospital.imagenes && hospital.imagenes.length > 0 ? hospital.imagenes[0] : null;
   const [imageOk, setImageOk] = React.useState(true);
   const [tab, setTab] = React.useState<"info" | "como-llegar">("info");
   const [moreOpen, setMoreOpen] = React.useState(false);
   const [technicalOpen, setTechnicalOpen] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const shareMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const [shareToast, setShareToast] = React.useState<string | null>(null);
   const [sheet, setSheet] = React.useState<"collapsed" | "medium" | "full">("medium");
+  const [viewportHeight, setViewportHeight] = React.useState(0);
+  const [draggingSheet, setDraggingSheet] = React.useState(false);
+  const [dragHeightPx, setDragHeightPx] = React.useState<number | null>(null);
+  const dragStartRef = React.useRef<{ startY: number; startHeight: number } | null>(null);
+  const draggedRef = React.useRef(false);
   const modeForSummary = activeTripMode ?? travelMode;
+
+  const [originQuery, setOriginQuery] = React.useState("");
+  const [originResults, setOriginResults] = React.useState<NominatimResult[]>([]);
+  const [originLoading, setOriginLoading] = React.useState(false);
+  const [originError, setOriginError] = React.useState<string | null>(null);
+  const [confirmPlace, setConfirmPlace] = React.useState<NearbyPlace | null>(null);
 
   React.useEffect(() => {
     setImageOk(true);
@@ -204,8 +286,96 @@ export function HospitalDetailPanel({
     setTab("info");
     setMoreOpen(false);
     setTechnicalOpen(false);
+    setShareOpen(false);
+    setShareToast(null);
+    setOriginQuery("");
+    setOriginResults([]);
+    setOriginLoading(false);
+    setOriginError(null);
     setSheet("medium");
+    setConfirmPlace(null);
   }, [open, hospital?.id]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => setViewportHeight(window.innerHeight || 0);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  React.useEffect(() => {
+    if (tab === "info") return;
+    if (onClearNearby) onClearNearby();
+    setConfirmPlace(null);
+  }, [onClearNearby, tab]);
+
+  React.useEffect(() => {
+    if (!shareOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const el = shareMenuRef.current;
+      if (!el) return;
+      if (e.target && el.contains(e.target as Node)) return;
+      setShareOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [shareOpen]);
+
+  React.useEffect(() => {
+    const q = originQuery.trim();
+    if (q.length < 3) {
+      setOriginResults([]);
+      setOriginLoading(false);
+      setOriginError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setOriginLoading(true);
+    setOriginError(null);
+    const t = setTimeout(() => {
+      let didTimeout = false;
+      const timeoutId = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+      }, 10_000);
+      fetch(`${apiBase}/buscar?q=${encodeURIComponent(q)}`, { signal: controller.signal })
+        .then(async (r) => {
+          if (!r.ok) {
+            const body = await r.json().catch(() => null);
+            const message =
+              body && typeof body === "object" && body.error && body.error.message
+                ? String(body.error.message)
+                : "Error al buscar. Reintenta.";
+            throw new Error(message);
+          }
+          return r.json() as Promise<NominatimResult[]>;
+        })
+        .then((data) => {
+          setOriginResults(Array.isArray(data) ? data : []);
+          setOriginLoading(false);
+        })
+        .catch((e) => {
+          if (e && e.name === "AbortError") {
+            if (!didTimeout) return;
+            setOriginResults([]);
+            setOriginLoading(false);
+            setOriginError("Servicio de búsqueda lento o no disponible. Reintenta.");
+            return;
+          }
+          setOriginResults([]);
+          setOriginLoading(false);
+          setOriginError(e instanceof Error ? e.message : "Error al buscar. Reintenta.");
+        })
+        .finally(() => clearTimeout(timeoutId));
+    }, 320);
+
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+  }, [apiBase, originQuery]);
 
   const fullName = hospital?.nombre_establecimiento ? toTitleCase(hospital.nombre_establecimiento) : "";
   const fullLocation = hospital ? `${hospital.distrito} · ${hospital.provincia} · ${hospital.departamento}` : "";
@@ -219,22 +389,58 @@ export function HospitalDetailPanel({
       ? hospital.serums_resumen.reduce((acc, r) => acc + (Number.isFinite(r.plazas_total) ? r.plazas_total : 0), 0)
       : null;
 
+  const plazasByModalidad = React.useMemo(() => {
+    const rows = hospital?.serums_resumen || [];
+    const norm = (v: string) =>
+      String(v || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+    let remunerado = 0;
+    let equivalente = 0;
+    for (const r of rows) {
+      const total = Number.isFinite(r.plazas_total) ? r.plazas_total : 0;
+      const mod = norm(r.modalidad);
+      if (mod.includes("remuner")) remunerado += total;
+      else if (mod.includes("equival")) equivalente += total;
+    }
+    return { remunerado, equivalente };
+  }, [hospital?.serums_resumen]);
+
   const summaryMetric = React.useMemo(() => {
     if (modeForSummary === "avion") {
-      const dur = flightEstimate ? formatDuration(flightEstimate.duracion) : "—";
-      const dist = flightEstimate
-        ? formatDistance(flightEstimate.distancia)
-        : directDistanceMeters != null
-          ? formatDistance(directDistanceMeters)
-          : "—";
-      return { primary: dur, secondary: dist, label: "Vuelo" };
+      const dist = airportDriveRoute ? formatDistance(airportDriveRoute.distancia) : "—";
+      const dur = airportDriveRoute ? formatDuration(airportDriveRoute.duracion) : "—";
+      return { primary: dur, secondary: dist, label: "Desde aeropuerto" };
     }
     const dur = route ? formatDuration(route.duracion) : "—";
     const dist = route ? formatDistance(route.distancia) : directDistanceMeters != null ? formatDistance(directDistanceMeters) : "—";
-    return { primary: dur, secondary: dist, label: modeForSummary === "pie" ? "A pie" : "Carro" };
-  }, [directDistanceMeters, flightEstimate, modeForSummary, route]);
+    return { primary: dur, secondary: dist, label: "Carro" };
+  }, [airportDriveRoute, directDistanceMeters, modeForSummary, route]);
 
-  const sheetHeight = sheet === "collapsed" ? "25vh" : sheet === "full" ? "100vh" : "50vh";
+  const snapHeights = React.useMemo(() => {
+    const vh = viewportHeight || 0;
+    const min = Math.round(vh * 0.25);
+    const mid = Math.round(vh * 0.5);
+    const max = Math.round(vh * 1.0);
+    return { min, mid, max };
+  }, [viewportHeight]);
+
+  const sheetTargetPx = sheet === "collapsed" ? snapHeights.min : sheet === "full" ? snapHeights.max : snapHeights.mid;
+  const sheetHeightPx = dragHeightPx != null ? dragHeightPx : sheetTargetPx;
+  const sheetHeight = sheetHeightPx ? `${sheetHeightPx}px` : sheet === "collapsed" ? "25vh" : sheet === "full" ? "100vh" : "50vh";
+
+  const plazasSummary = React.useMemo(() => {
+    if (plazasTotal == null) return "—";
+    const parts: string[] = [];
+    parts.push(`${plazasTotal} total`);
+    if (plazasByModalidad.remunerado || plazasByModalidad.equivalente) {
+      parts.push(`${plazasByModalidad.remunerado} remuneradas`);
+      parts.push(`${plazasByModalidad.equivalente} equivalentes`);
+    }
+    return parts.join(" · ");
+  }, [plazasByModalidad.equivalente, plazasByModalidad.remunerado, plazasTotal]);
 
   return (
     <div
@@ -254,13 +460,14 @@ export function HospitalDetailPanel({
 
       <div
         className={cn(
-          "absolute bottom-0 left-0 right-0 p-3 transition-transform sm:bottom-auto sm:left-auto sm:right-0 sm:top-0 sm:h-full sm:w-full sm:max-w-[480px] sm:p-4",
+          "absolute bottom-0 left-0 right-0 p-3 transition-transform duration-300 ease-out sm:bottom-auto sm:left-auto sm:right-0 sm:top-0 sm:h-full sm:w-full sm:max-w-[480px] sm:p-4",
           open ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:translate-x-full",
         )}
       >
         <Card
           className={cn(
-            "flex h-[var(--sheet-h)] max-h-[var(--sheet-h)] flex-col overflow-hidden bg-white sm:h-full sm:max-h-none",
+            "flex h-[var(--sheet-h)] max-h-[var(--sheet-h)] flex-col overflow-hidden bg-white sm:h-full sm:max-h-none sm:transition-none",
+            draggingSheet ? "transition-none" : "transition-[height,max-height] duration-300 ease-out",
             open ? "serums-panel-anim-right sm:serums-panel-anim-right" : "",
           )}
           style={{ ["--sheet-h" as never]: sheetHeight } as React.CSSProperties}
@@ -268,8 +475,48 @@ export function HospitalDetailPanel({
           <div className="sm:hidden">
             <button
               type="button"
-              className="flex w-full items-center justify-center py-2"
-              onClick={() => setSheet((v) => (v === "collapsed" ? "medium" : v === "medium" ? "full" : "collapsed"))}
+              className="flex w-full touch-none items-center justify-center py-2"
+              onPointerDown={(e) => {
+                draggedRef.current = false;
+                dragStartRef.current = { startY: e.clientY, startHeight: sheetHeightPx };
+                setDraggingSheet(true);
+                setDragHeightPx(sheetHeightPx);
+                try {
+                  (e.currentTarget as HTMLButtonElement).setPointerCapture(e.pointerId);
+                } catch {
+                }
+              }}
+              onPointerMove={(e) => {
+                if (!dragStartRef.current) return;
+                const { startY, startHeight } = dragStartRef.current;
+                const dy = startY - e.clientY;
+                if (Math.abs(dy) > 4) draggedRef.current = true;
+                const next = startHeight + dy;
+                const clamped = Math.max(snapHeights.min, Math.min(snapHeights.max, next));
+                setDragHeightPx(clamped);
+              }}
+              onPointerUp={() => {
+                const h = dragHeightPx != null ? dragHeightPx : sheetHeightPx;
+                const opts = [
+                  { key: "collapsed" as const, px: snapHeights.min },
+                  { key: "medium" as const, px: snapHeights.mid },
+                  { key: "full" as const, px: snapHeights.max },
+                ];
+                opts.sort((a, b) => Math.abs(a.px - h) - Math.abs(b.px - h));
+                setSheet(opts[0].key);
+                setDraggingSheet(false);
+                setDragHeightPx(null);
+                dragStartRef.current = null;
+              }}
+              onPointerCancel={() => {
+                setDraggingSheet(false);
+                setDragHeightPx(null);
+                dragStartRef.current = null;
+              }}
+              onClick={() => {
+                if (draggedRef.current) return;
+                setSheet((v) => (v === "collapsed" ? "medium" : v === "medium" ? "full" : "collapsed"));
+              }}
               aria-label="Cambiar tamaño del panel"
             >
               <div className="h-1.5 w-14 rounded-full bg-black/15" />
@@ -297,12 +544,118 @@ export function HospitalDetailPanel({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]"
-                  aria-label="Agregar a favoritos"
-                  title="Agregar a favoritos"
+                  className={cn(
+                    "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]",
+                    !hospital ? "opacity-50" : "",
+                  )}
+                  aria-label={isHospitalFavorited ? "Quitar de favoritos" : "Guardar en favoritos"}
+                  title={favoritesEnabled ? (isHospitalFavorited ? "Quitar de favoritos" : "Guardar en favoritos") : "Inicia sesión para guardar favoritos"}
+                  disabled={!hospital}
+                  onClick={() => {
+                    if (!hospital) return;
+                    if (onToggleFavoriteHospital) onToggleFavoriteHospital();
+                    else onRequestAuthForFavorites?.();
+                  }}
                 >
-                  <HeartIcon />
+                  <HeartIcon filled={favoritesEnabled && isHospitalFavorited} />
                 </button>
+                <div className="relative" ref={shareMenuRef}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]",
+                      !hospital || !shareUrl ? "opacity-50" : "",
+                    )}
+                    aria-label="Compartir"
+                    title="Compartir"
+                    disabled={!hospital || !shareUrl}
+                    onClick={() => setShareOpen((v) => !v)}
+                  >
+                    <ShareIcon />
+                  </button>
+
+                  {shareOpen ? (
+                    <div className="absolute right-0 top-[calc(100%+10px)] z-[3600] w-[280px] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white shadow-[var(--shadow-soft)]">
+                      <div className="px-4 py-3">
+                        <div className="text-sm font-semibold text-[var(--title)]">Compartir plaza</div>
+                        <div className="mt-0.5 text-xs font-medium text-[var(--label)]">
+                          Envía el enlace con nombre y ubicación.
+                        </div>
+                      </div>
+                      <div className="border-t border-[var(--border)] p-2">
+                        <div className="grid gap-2">
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-left hover:bg-black/[0.04]"
+                            onClick={() => {
+                              if (!shareUrl) return;
+                              const text = `Plaza SERUMS: ${fullName || "Establecimiento"} — ${fullLocation || "Ubicación"} ${shareUrl}`;
+                              window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+                              setShareOpen(false);
+                            }}
+                          >
+                            <div className="text-sm font-semibold text-[var(--title)]">WhatsApp</div>
+                            <div className="text-xs font-medium text-[var(--label)]">Enviar mensaje</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-left hover:bg-black/[0.04]"
+                            onClick={async () => {
+                              if (!shareUrl) return;
+                              try {
+                                await navigator.clipboard.writeText(shareUrl);
+                                setShareToast("Enlace copiado.");
+                              } catch {
+                                setShareToast("No se pudo copiar el enlace.");
+                              }
+                              setShareOpen(false);
+                              window.setTimeout(() => setShareToast(null), 1600);
+                            }}
+                          >
+                            <div className="text-sm font-semibold text-[var(--title)]">Copiar enlace</div>
+                            <div className="text-xs font-medium text-[var(--label)]">Deep link</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-left hover:bg-black/[0.04]"
+                            onClick={() => {
+                              if (!shareUrl) return;
+                              window.open(
+                                `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
+                                "_blank",
+                                "noopener,noreferrer",
+                              );
+                              setShareOpen(false);
+                            }}
+                          >
+                            <div className="text-sm font-semibold text-[var(--title)]">Facebook</div>
+                            <div className="text-xs font-medium text-[var(--label)]">Compartir enlace</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-left hover:bg-black/[0.04]"
+                            onClick={() => {
+                              if (!shareUrl) return;
+                              const text = `Plaza SERUMS: ${fullName || "Establecimiento"} — ${fullLocation || "Ubicación"}`;
+                              window.open(
+                                `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`,
+                                "_blank",
+                                "noopener,noreferrer",
+                              );
+                              setShareOpen(false);
+                            }}
+                          >
+                            <div className="text-sm font-semibold text-[var(--title)]">Twitter/X</div>
+                            <div className="text-xs font-medium text-[var(--label)]">Publicar</div>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]"
@@ -314,6 +667,10 @@ export function HospitalDetailPanel({
                 </button>
               </div>
             </div>
+
+            {shareToast ? (
+              <div className="mt-2 text-xs font-medium text-[var(--label)]">{shareToast}</div>
+            ) : null}
 
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
@@ -378,10 +735,7 @@ export function HospitalDetailPanel({
                         <InfoRow label="Profesión requerida" value={profesion} />
                         <InfoRow label="Institución" value={hospital.institucion || "—"} />
                         <InfoRow label="GD" value={hospital.grado_dificultad || "—"} />
-                        <InfoRow
-                          label="Plazas SERUMS disponibles"
-                          value={plazasTotal != null ? plazasTotal : hospital.serums_resumen && hospital.serums_resumen.length > 0 ? "—" : "—"}
-                        />
+                        <InfoRow label="Plazas SERUMS disponibles" value={plazasSummary} />
                       </div>
                     </div>
 
@@ -441,14 +795,18 @@ export function HospitalDetailPanel({
                             <div className="grid gap-3 px-4 py-3">
                               <InfoRow label="Código RENIPRESS modular" value={hospital.codigo_renipress_modular || "—"} />
                               <InfoRow label="Coordenadas" value={`${hospital.lat.toFixed(6)}, ${hospital.lng.toFixed(6)}`} />
-                              <Button
-                                variant="secondary"
-                                className="w-full"
-                                onClick={onRequestGeocode}
-                                disabled={!onRequestGeocode || geocodeLoading}
-                              >
-                                {geocodeLoading ? "Corrigiendo ubicación…" : geocodeError ? "Reintentar corrección" : "Corregir ubicación"}
-                              </Button>
+                              {canCorrectLocation ? (
+                                <Button
+                                  variant="secondary"
+                                  className="w-full"
+                                  onClick={onRequestGeocode}
+                                  disabled={!onRequestGeocode || geocodeLoading}
+                                >
+                                  {geocodeLoading ? "Corrigiendo ubicación…" : geocodeError ? "Reintentar corrección" : "Corregir ubicación"}
+                                </Button>
+                              ) : favoritesEnabled && authRole === "user" ? (
+                                <div className="text-xs font-medium text-[var(--label)]">Solo Admin puede corregir ubicación.</div>
+                              ) : null}
                             </div>
                           </div>
                         </div>
@@ -461,60 +819,169 @@ export function HospitalDetailPanel({
                           <div className="text-sm font-semibold text-[var(--title)]">Qué hay cerca</div>
                           <div className="text-xs font-medium text-[var(--label)]">Explora servicios en el área.</div>
                         </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={onRequestNearby}
-                          disabled={!onRequestNearby || nearbyLoading}
-                        >
-                          {nearbyLoading ? "Buscando…" : nearby ? "Actualizar" : "Buscar"}
-                        </Button>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Chip>Restaurantes</Chip>
-                        <Chip>Farmacias</Chip>
-                        <Chip>Bancos</Chip>
-                        <Chip>Gimnasios</Chip>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Chip>1 km</Chip>
-                        <Chip>2 km</Chip>
-                        <Chip>5 km</Chip>
-                      </div>
-
-                      {nearby ? (
-                        <div className="mt-3 grid gap-2">
-                          {[
-                            ...nearby.hospedajes.map((p) => ({ p, group: "Hospedaje" })),
-                            ...nearby.restaurantes.map((p) => ({ p, group: "Restaurante" })),
-                            ...nearby.farmacias.map((p) => ({ p, group: "Farmacia" })),
-                            ...nearby.tiendas.map((p) => ({ p, group: "Tienda" })),
-                            ...nearby.comisarias.map((p) => ({ p, group: "Comisaría" })),
-                          ]
-                            .slice(0, 10)
-                            .map(({ p, group }, idx) => (
-                              <a
-                                key={p.id}
-                                href={mapsUrlForPlace(p)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="group flex items-start gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 hover:bg-black/[0.04]"
-                              >
-                                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-xs font-semibold text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                                  {idx + 1}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="line-clamp-1 text-sm font-semibold text-[var(--title)]">{p.name || "Lugar"}</div>
-                                  <div className="line-clamp-1 text-xs font-medium text-[var(--label)]">{group}</div>
-                                </div>
-                              </a>
-                            ))}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={onRequestNearby}
+                            disabled={!onRequestNearby || nearbyLoading}
+                          >
+                            {nearbyLoading ? "Buscando…" : nearby ? "Actualizar" : "Buscar"}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              if (onClearNearby) onClearNearby();
+                            }}
+                            disabled={!onClearNearby || !nearby}
+                          >
+                            Ocultar
+                          </Button>
                         </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {[
+                          { key: "Hospedaje", label: "Hospedaje", enabled: nearby ? nearby.hospedajes.length > 0 : false },
+                          { key: "Restaurante/Chifa", label: "Restaurante/Chifa", enabled: nearby ? nearby.restaurantes.length > 0 : false },
+                          { key: "Centro Comercial", label: "Centro Comercial", enabled: nearby ? nearby.centros_comerciales.length > 0 : false },
+                          { key: "Supermercado", label: "Supermercado", enabled: nearby ? nearby.supermercados.length > 0 : false },
+                          { key: "Farmacia", label: "Farmacia", enabled: nearby ? nearby.farmacias.length > 0 : false },
+                          { key: "Tambo/Bodega", label: "Tambo/Bodega", enabled: nearby ? nearby.tiendas.length > 0 : false },
+                          { key: "Banco/Cajero", label: "Banco/Cajero", enabled: nearby ? nearby.bancos.length > 0 : false },
+                          { key: "Comisaría", label: "Comisaría", enabled: nearby ? nearby.comisarias.length > 0 : false },
+                          { key: "Gimnasio", label: "Gimnasio", enabled: nearby ? nearby.gimnasios.length > 0 : false },
+                          { key: "Iglesia", label: "Iglesia", enabled: nearby ? nearby.iglesias.length > 0 : false },
+                        ].map((c) => {
+                          const active = nearbyFilters.types.includes(c.key);
+                          return (
+                            <button
+                              key={c.key}
+                              type="button"
+                              disabled={!c.enabled}
+                              className={cn(
+                                "rounded-full px-3 py-2 text-xs font-medium",
+                                c.enabled ? "bg-black/[0.03] hover:bg-black/[0.06]" : "bg-black/[0.02] opacity-60",
+                                active ? "ring-2 ring-black/10" : "",
+                              )}
+                              onClick={() => {
+                                if (!onChangeNearbyFilters || !c.enabled) return;
+                                const set = new Set(nearbyFilters.types);
+                                if (set.has(c.key)) set.delete(c.key);
+                                else set.add(c.key);
+                                onChangeNearbyFilters({ types: Array.from(set), radiusKm: nearbyFilters.radiusKm });
+                              }}
+                            >
+                              {c.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {[1, 2, 5].map((km) => {
+                          const active = nearbyFilters.radiusKm === km;
+                          return (
+                            <button
+                              key={km}
+                              type="button"
+                              className={cn(
+                                "rounded-full px-3 py-2 text-xs font-medium",
+                                "bg-black/[0.03] hover:bg-black/[0.06]",
+                                active ? "ring-2 ring-black/10" : "",
+                              )}
+                              onClick={() => {
+                                if (!onChangeNearbyFilters) return;
+                                onChangeNearbyFilters({ types: nearbyFilters.types, radiusKm: km });
+                              }}
+                            >
+                              {km} km
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {filteredNearby && filteredNearby.length > 0 ? (
+                        <div className="mt-3 grid gap-2">
+                          {filteredNearby.map(({ p, group, index }) => (
+                            <div
+                              key={p.id}
+                              className="group flex items-start gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 hover:bg-black/[0.04]"
+                              onMouseEnter={() => onHoverNearby && onHoverNearby(p.id)}
+                              onMouseLeave={() => onHoverNearby && onHoverNearby(null)}
+                              onClick={() => onClickNearby && onClickNearby(p.id)}
+                            >
+                              <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-xs font-semibold text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+                                {index}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="line-clamp-1 text-sm font-semibold text-[var(--title)]">{p.name || "Lugar"}</div>
+                                <div className="line-clamp-1 text-xs font-medium text-[var(--label)]">{group}</div>
+                              </div>
+                              <div className="ml-auto flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] hover:bg-black/[0.03]",
+                                  )}
+                                  aria-label={isPlaceFavorited && isPlaceFavorited(p.id) ? "Quitar de favoritos" : "Guardar en favoritos"}
+                                  title={
+                                    favoritesEnabled
+                                      ? isPlaceFavorited && isPlaceFavorited(p.id)
+                                        ? "Quitar de favoritos"
+                                        : "Guardar en favoritos"
+                                      : "Inicia sesión para guardar favoritos"
+                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!onToggleFavoritePlace) return;
+                                    onToggleFavoritePlace(p, group);
+                                  }}
+                                >
+                                  <HeartIcon filled={!!(favoritesEnabled && isPlaceFavorited && isPlaceFavorited(p.id))} />
+                                </button>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmPlace(p);
+                                  }}
+                                >
+                                  Abrir
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : nearby ? (
+                        <div className="mt-3 text-xs font-medium text-[var(--label)]">Sin resultados con los filtros actuales.</div>
                       ) : (
                         <div className="mt-3 text-xs font-medium text-[var(--label)]">Selecciona Buscar para ver resultados.</div>
                       )}
+
+                      {confirmPlace ? (
+                        <div className="mt-3 rounded-[var(--radius-card)] border border-[var(--border)] bg-white p-3 shadow-[var(--shadow-soft)]">
+                          <div className="text-sm font-semibold text-[var(--title)]">
+                            ¿Quieres abrir {confirmPlace.name || "el lugar"} en Google Maps?
+                          </div>
+                          <div className="mt-2 flex gap-2">
+                            <Button
+                              variant="primary"
+                              onClick={() => {
+                                window.open(mapsUrlForPlace(confirmPlace), "_blank", "noopener,noreferrer");
+                                setConfirmPlace(null);
+                              }}
+                            >
+                              Abrir
+                            </Button>
+                            <Button variant="secondary" onClick={() => setConfirmPlace(null)}>
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
 
                     {(nearbyError || geocodeError || geocodeMessage) && (
@@ -527,8 +994,8 @@ export function HospitalDetailPanel({
                   <div className="grid gap-3">
                     <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
                       <div className="text-sm font-semibold text-[var(--title)]">Modo</div>
-                      <div className="mt-3 grid grid-cols-3 gap-2">
-                        {(["carro", "pie", "avion"] as const).map((m) => (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {(["carro", "avion"] as const).map((m) => (
                           <button
                             key={m}
                             type="button"
@@ -541,48 +1008,182 @@ export function HospitalDetailPanel({
                             onClick={() => onChangeTravelMode(m)}
                           >
                             <TravelIcon mode={m} />
-                            {m === "carro" ? "Carro" : m === "pie" ? "A pie" : "Avión"}
+                            {m === "carro" ? "Carro" : "Avión"}
                           </button>
                         ))}
                       </div>
                       <div className="mt-3 text-xs font-medium text-[var(--label)]">
-                        Tiempo estimado sin considerar tráfico.
+                        Tiempo estimado sin considerar tráfico ni paradas.
                       </div>
                     </div>
 
-                    <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                      <div className="text-xs font-semibold text-[var(--label)]">Tramo 1</div>
-                      <div className="mt-1 text-sm font-semibold text-[var(--title)]">Vuelo al aeropuerto más cercano</div>
-                      <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
-                        <div className="text-xs font-medium text-[var(--label)]">Aeropuerto</div>
-                        <div className="mt-0.5 text-sm font-medium text-[var(--title)]">
-                          {nearestAirport ? nearestAirport.name || "Aeropuerto" : "Aeropuerto más cercano"}
-                        </div>
-                        <div className="mt-1 text-xs font-medium text-[var(--label)]">
-                          {flightEstimate ? `${formatDuration(flightEstimate.duracion)} · ${formatDistance(flightEstimate.distancia)}` : "—"}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                      <div className="text-xs font-semibold text-[var(--label)]">Tramo 2</div>
-                      <div className="mt-1 text-sm font-semibold text-[var(--title)]">Ruta terrestre destacada</div>
-                      <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
-                        <div className="text-xs font-medium text-[var(--label)]">Ruta</div>
-                        <div className="mt-0.5 text-sm font-medium text-[var(--title)]">
-                          {airportDriveRoute ? `${formatDuration(airportDriveRoute.duracion)} · ${formatDistance(airportDriveRoute.distancia)}` : "—"}
-                        </div>
-                        {nearestAirportDistanceMeters != null ? (
+                    {travelMode === "carro" ? (
+                      <>
+                        <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
+                          <div className="text-sm font-semibold text-[var(--title)]">Origen (carro)</div>
                           <div className="mt-1 text-xs font-medium text-[var(--label)]">
-                            Aeropuerto → establecimiento: {formatDistance(nearestAirportDistanceMeters)}
+                            {routeOrigin.type === "user"
+                              ? "Mi ubicación actual"
+                              : routeOrigin.type === "airport"
+                                ? `Aeropuerto: ${routeOrigin.label}`
+                                : routeOrigin.label}
+                          </div>
+                          <div className="mt-3 grid gap-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                className={cn(
+                                  "h-10 rounded-full border text-sm font-medium transition-colors",
+                                  routeOrigin.type === "user"
+                                    ? "border-black/10 bg-black/[0.04] text-[var(--title)]"
+                                    : "border-[var(--border)] bg-white text-[var(--label)] hover:bg-black/[0.03]",
+                                )}
+                                onClick={() => onChangeRouteOrigin({ type: "user" })}
+                              >
+                                Mi ubicación
+                              </button>
+                              <button
+                                type="button"
+                                className={cn(
+                                  "h-10 rounded-full border text-sm font-medium transition-colors",
+                                  routeOrigin.type === "airport"
+                                    ? "border-black/10 bg-black/[0.04] text-[var(--title)]"
+                                    : "border-[var(--border)] bg-white text-[var(--label)] hover:bg-black/[0.03]",
+                                )}
+                                onClick={() => {
+                                  if (onUseNearestAirportAsOrigin) onUseNearestAirportAsOrigin();
+                                }}
+                                disabled={!onUseNearestAirportAsOrigin}
+                              >
+                                Aeropuerto
+                              </button>
+                            </div>
+
+                            <div className="relative">
+                              <input
+                                value={originQuery}
+                                onChange={(e) => setOriginQuery(e.target.value)}
+                                placeholder="Buscar origen (aeropuerto, terrapuerto, ciudad...)"
+                                className="h-10 w-full rounded-2xl border border-[var(--border)] bg-white px-4 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none ring-0 placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5"
+                              />
+
+                              {originLoading || originError || originResults.length > 0 ? (
+                                <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-[3600] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white shadow-[var(--shadow-soft)]">
+                                  {originLoading ? (
+                                    <div className="px-4 py-3 text-sm font-medium text-[var(--label)]">Buscando…</div>
+                                  ) : originError ? (
+                                    <div className="px-4 py-3 text-sm font-medium text-[var(--title)]">{originError}</div>
+                                  ) : (
+                                    <div className="max-h-[240px] overflow-auto">
+                                      {originResults.slice(0, 8).map((r) => (
+                                        <button
+                                          key={r.place_id}
+                                          type="button"
+                                          className="w-full px-4 py-3 text-left text-sm font-medium text-[var(--title)] hover:bg-black/[0.03]"
+                                          onMouseDown={(e) => e.preventDefault()}
+                                          onClick={() => {
+                                            const lat = Number(r.lat);
+                                            const lng = Number(r.lon);
+                                            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+                                            onChangeRouteOrigin({
+                                              type: "custom",
+                                              label: r.display_name,
+                                              lat,
+                                              lng,
+                                            });
+                                            setOriginQuery(r.display_name);
+                                            setOriginResults([]);
+                                          }}
+                                        >
+                                          <div className="line-clamp-2">{r.display_name}</div>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+
+                        {route ? (
+                          <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
+                            <div className="text-sm font-semibold text-[var(--title)]">Ruta en carro</div>
+                            <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
+                              <div className="text-sm font-semibold text-[var(--title)]">
+                                {formatDistance(route.distancia)} · {formatDuration(route.duracion)}
+                              </div>
+                              <div className="mt-1 text-xs font-medium text-[var(--label)]">
+                                {formatDuration(route.duracion)} en carro (sin tráfico)
+                              </div>
+                            </div>
+                            {route.duracion > 4 * 60 * 60 ? (
+                              <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-sm font-semibold text-[var(--title)]">
+                                {route.duracion > 12 * 60 * 60
+                                  ? "Viaje de +12h. Considera hacer paradas de descanso."
+                                  : "Viaje de +4h. Considera hacer paradas de descanso."}
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
-                      </div>
-                    </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
+                          <div className="text-xs font-semibold text-[var(--label)]">Tramo 1</div>
+                          <div className="mt-1 text-sm font-semibold text-[var(--title)]">
+                            Vuelo hasta {nearestAirport ? nearestAirport.name || "aeropuerto" : "el aeropuerto más cercano"}
+                          </div>
+                          <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
+                            <div className="text-xs font-medium text-[var(--label)]">Aeropuerto</div>
+                            <div className="mt-0.5 text-sm font-medium text-[var(--title)]">
+                              {nearestAirport ? nearestAirport.name || "Aeropuerto" : airportLoading ? "Buscando…" : "Aeropuerto más cercano"}
+                            </div>
+                            {nearestAirportDistanceMeters != null ? (
+                              <div className="mt-1 text-xs font-medium text-[var(--label)]">
+                                Aeropuerto → establecimiento: {formatDistance(nearestAirportDistanceMeters)}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
+                          <div className="text-xs font-semibold text-[var(--label)]">Tramo 2</div>
+                          <div className="mt-1 text-sm font-semibold text-[var(--title)]">Desde aeropuerto</div>
+                          <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
+                            <div className="text-xs font-medium text-[var(--label)]">Ruta terrestre</div>
+                            <div className="mt-0.5 text-sm font-semibold text-[var(--title)]">
+                              {airportDriveRoute
+                                ? `Desde aeropuerto: ${formatDistance(airportDriveRoute.distancia)} · ${formatDuration(airportDriveRoute.duracion)} en carro hasta el establecimiento`
+                                : airportLoading
+                                  ? "Calculando…"
+                                  : "—"}
+                            </div>
+                            {airportDriveRoute ? (
+                              <div className="mt-1 text-xs font-medium text-[var(--label)]">
+                                {formatDuration(airportDriveRoute.duracion)} en carro (sin tráfico)
+                              </div>
+                            ) : null}
+                            {airportDriveRoute && airportDriveRoute.duracion > 4 * 60 * 60 ? (
+                              <div className="mt-2 rounded-[var(--radius-card)] bg-white px-3 py-3 text-sm font-semibold text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+                                {airportDriveRoute.duracion > 12 * 60 * 60
+                                  ? "Viaje de +12h. Considera hacer paradas de descanso."
+                                  : "Viaje de +4h. Considera hacer paradas de descanso."}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     <div className="grid gap-2">
-                      <Button variant="primary" className="w-full" onClick={onRequestRoute} disabled={!onRequestRoute || routeLoading}>
-                        {routeLoading ? "Calculando…" : routeError ? "Reintentar" : "Mostrar ruta en el mapa"}
+                      <Button
+                        variant="primary"
+                        className="w-full"
+                        onClick={onRequestRoute}
+                        disabled={!onRequestRoute || routeLoading || airportLoading}
+                      >
+                        {routeLoading || airportLoading ? "Calculando…" : routeError || airportError ? "Reintentar" : "Mostrar ruta en el mapa"}
                       </Button>
                       {airportError || routeError ? (
                         <div className="rounded-[var(--radius-panel)] bg-black/[0.02] px-4 py-3 text-sm font-medium text-[var(--title)]">
