@@ -199,9 +199,32 @@ export function FiltersBar({
   userLocation,
   onCloseMobile,
 }: FiltersBarProps) {
-  const [locationOpen, setLocationOpen] = React.useState(false);
-  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [locationOpen, setLocationOpen] = React.useState(true);
+  const [filtersOpen, setFiltersOpen] = React.useState(true);
   const [airportOpen, setAirportOpen] = React.useState(false);
+
+  const deptValues = React.useMemo(() => {
+    if (Array.isArray(options?.departamentos?.values) && options.departamentos.values.length > 0) {
+      return options.departamentos.values;
+    }
+    const set = new Set<string>();
+    for (const h of results) {
+      const v = String(h?.departamento || "").trim();
+      if (v) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [options?.departamentos?.values, results]);
+  const instValues = React.useMemo(() => {
+    if (Array.isArray(options?.instituciones?.values) && options.instituciones.values.length > 0) {
+      return options.instituciones.values;
+    }
+    const set = new Set<string>();
+    for (const h of results) {
+      const v = String(h?.institucion || "").trim();
+      if (v) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [options?.instituciones?.values, results]);
 
   const [selectedDepartamentos, setSelectedDepartamentos] = React.useState<string[]>(
     Array.isArray(filters.departamento) ? filters.departamento : [],
@@ -322,7 +345,7 @@ export function FiltersBar({
                 className="pr-1"
               >
                 <div className="grid gap-1 px-1 pb-2">
-                  {options.departamentos.values.map((d) => {
+                  {deptValues.map((d) => {
                     const checked = selectedDepartamentos.includes(d);
                     const enabled = options.departamentos.enabled[d] ?? true;
                     return (
@@ -394,7 +417,7 @@ export function FiltersBar({
                     }}
                   >
                     <div className="grid gap-1">
-                      {options.instituciones.values.map((i) => {
+                      {instValues.map((i) => {
                         const checked = selectedInstituciones.includes(i);
                         const enabled = options.instituciones.enabled[i] ?? true;
                         return (

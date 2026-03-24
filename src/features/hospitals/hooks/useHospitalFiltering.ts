@@ -22,7 +22,7 @@ export function createInitialHospitalFilters(): HospitalFilters {
 function getApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (configured && configured.trim().length > 0) return configured.trim().replace(/\/$/, "");
-  return "/api";
+  return "http://localhost:4000/api";
 }
 
 function buildHospitalQuery(filters: HospitalFilters) {

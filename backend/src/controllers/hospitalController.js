@@ -44,6 +44,11 @@ const listHospitalsMap = asyncHandler(async (req, res) => {
   );
 });
 
+const listHospitalFacets = asyncHandler(async (req, res) => {
+  const facets = await hospitalService.listHospitalFacets(req.query);
+  res.json(facets);
+});
+
 const getHospital = asyncHandler(async (req, res) => {
   const hospital = await hospitalService.getHospitalById(req.params.id);
   res.json(hospital);
@@ -54,4 +59,4 @@ const geocodeHospital = asyncHandler(async (req, res) => {
   res.json(hospital);
 });
 
-module.exports = { listHospitals, listHospitalsMap, getHospital, geocodeHospital };
+module.exports = { listHospitals, listHospitalsMap, listHospitalFacets, getHospital, geocodeHospital };

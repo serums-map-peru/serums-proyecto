@@ -1156,6 +1156,56 @@ async function listHospitals(filters) {
   return base.filter((h) => allowed.has(String(h.id)));
 }
 
+async function listHospitalFacets(filters) {
+  const incoming = filters && typeof filters === "object" ? filters : {};
+  const baseFilters = { ...incoming };
+  delete baseFilters.airport_hours_max;
+
+  const allHospitals = await listHospitals({});
+
+  async function buildFacet(key) {
+    const others = { ...baseFilters };
+    delete others[key];
+
+    const filtered = await listHospitals(others);
+    const countsByLower = new Set();
+    for (const h of filtered) {
+      const raw = cleanString(h && h[key] != null ? h[key] : "");
+      if (!raw) continue;
+      countsByLower.add(raw.toLowerCase());
+    }
+
+    const lowerToLabel = new Map();
+    for (const h of allHospitals) {
+      const raw = cleanString(h && h[key] != null ? h[key] : "");
+      if (!raw) continue;
+      const lower = raw.toLowerCase();
+      const existing = lowerToLabel.get(lower);
+      if (!existing || raw.localeCompare(existing) < 0) lowerToLabel.set(lower, raw);
+    }
+
+    const values = Array.from(lowerToLabel.values())
+      .filter(Boolean)
+      .sort((a, b) => String(a).localeCompare(String(b)));
+
+    const enabled = {};
+    for (const [lower, label] of lowerToLabel.entries()) {
+      enabled[label] = countsByLower.has(lower);
+    }
+
+    return { values, enabled };
+  }
+
+  const [departamentos, instituciones, grados_dificultad, categorias] = await Promise.all([
+    buildFacet("departamento"),
+    buildFacet("institucion"),
+    buildFacet("grado_dificultad"),
+    buildFacet("categoria"),
+  ]);
+
+  return { departamentos, instituciones, grados_dificultad, categorias };
+}
+
 async function getHospitalById(id) {
   if (DB_ENABLED) await ensureDbSeeded();
   const store = DB_ENABLED ? await loadHospitalsFromDb() : await loadHospitalsFromCsv();
@@ -1198,6 +1248,7 @@ async function __persistCoordOverrideForImport(id, { lat, lng, source }) {
 
 module.exports = {
   listHospitals,
+  listHospitalFacets,
   getHospitalById,
   geocodeHospitalById,
   importHospitalsToDb,

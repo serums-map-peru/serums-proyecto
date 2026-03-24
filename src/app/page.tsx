@@ -424,7 +424,10 @@ export default function HomePage() {
   const [authNonce, setAuthNonce] = React.useState(0);
   const [authRole, setAuthRoleState] = React.useState<"admin" | "user" | null>(null);
 
-  const favoritesEnabled = React.useMemo(() => !!getAuthToken(), [authNonce]);
+  const [hasHydrated, setHasHydrated] = React.useState(false);
+  React.useEffect(() => setHasHydrated(true), []);
+
+  const favoritesEnabled = hasHydrated && !!getAuthToken();
   const [favorites, setFavorites] = React.useState<FavoriteItem[]>([]);
   const [favoritesLoading, setFavoritesLoading] = React.useState(false);
   const [favoritesError, setFavoritesError] = React.useState<string | null>(null);
@@ -1533,9 +1536,8 @@ export default function HomePage() {
         activeTripMode={activeTrip && selectedHospital && activeTrip.hospitalId === selectedHospital.id ? activeTrip.mode : null}
         directDistanceMeters={directDistanceMeters}
         shareUrl={
-          selectedHospital
+          selectedHospital && hasHydrated
             ? (() => {
-                if (typeof window === "undefined") return "";
                 const url = new URL(`/establecimiento/${encodeURIComponent(selectedHospital.id)}`, window.location.href);
                 return url.toString();
               })()
@@ -1544,10 +1546,11 @@ export default function HomePage() {
         nearbyFilters={{ types: nearbyFilterTypes, radiusKm: nearbyRadiusKm }}
         canCorrectLocation={
           authRole === "admin" ||
-          (() => {
-            const e = getAuthEmailFromToken();
-            return !!(e && e.trim().toLowerCase() === "admin@localisa.com");
-          })()
+          (hasHydrated &&
+            (() => {
+              const e = getAuthEmailFromToken();
+              return !!(e && e.trim().toLowerCase() === "admin@localisa.com");
+            })())
         }
         authRole={authRole}
         onChangeNearbyFilters={(next) => {
