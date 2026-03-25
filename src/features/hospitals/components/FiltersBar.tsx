@@ -60,11 +60,13 @@ function SectionChevron({ open }: { open: boolean }) {
 
 function AppleCheckbox({
   label,
+  title,
   checked,
   disabled,
   onChange,
 }: {
   label: string;
+  title?: string;
   checked: boolean;
   disabled?: boolean;
   onChange: () => void;
@@ -83,11 +85,13 @@ function AppleCheckbox({
       aria-pressed={checked}
       aria-disabled={disabled && !checked ? true : undefined}
     >
-      <div className="min-w-0 text-sm font-medium text-[var(--label)]">{label}</div>
+      <div className="min-w-0 text-sm font-medium text-[var(--label)]" title={title}>
+        {label}
+      </div>
       <div
         className={cn(
           "grid h-5 w-5 place-items-center rounded-full border-2 transition-[background-color,border-color] duration-200 ease-out",
-          checked ? "border-[var(--accent)] bg-[var(--accent)]" : "border-black/20 bg-white",
+          checked ? "border-[var(--primary)] bg-[var(--primary)]" : "border-border bg-[var(--card)]",
         )}
         aria-hidden="true"
       >
@@ -172,6 +176,16 @@ function normalizeInstitution(value: string) {
     .trim();
 }
 
+function abbreviateInstitutionForFilter(value: string) {
+  const full = String(value || "").trim();
+  const n = normalizeInstitution(full);
+  if (n === "sanidad de la fuerza aerea del peru") return { label: "FAP", title: full };
+  if (n === "sanidad de la marina de guerra del peru") return { label: "Marina", title: full };
+  if (n === "sanidad de la policia nacional del peru") return { label: "PNP", title: full };
+  if (n === "sanidad del ejercito del peru") return { label: "Ejército", title: full };
+  return { label: full, title: undefined };
+}
+
 function institutionAccentColor(institucion: string) {
   const v = normalizeInstitution(institucion);
   if (v.includes("essalud")) return "#38BDF8";
@@ -199,9 +213,11 @@ export function FiltersBar({
   userLocation,
   onCloseMobile,
 }: FiltersBarProps) {
-  const [locationOpen, setLocationOpen] = React.useState(true);
-  const [filtersOpen, setFiltersOpen] = React.useState(true);
+  const [locationOpen, setLocationOpen] = React.useState(false);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [airportOpen, setAirportOpen] = React.useState(false);
+
+  const [departmentSearch, setDepartmentSearch] = React.useState<string>("");
 
   const deptValues = React.useMemo(() => {
     if (Array.isArray(options?.departamentos?.values) && options.departamentos.values.length > 0) {
@@ -213,7 +229,7 @@ export function FiltersBar({
       if (v) set.add(v);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [options?.departamentos?.values, results]);
+  }, [options, results]);
   const instValues = React.useMemo(() => {
     if (Array.isArray(options?.instituciones?.values) && options.instituciones.values.length > 0) {
       return options.instituciones.values;
@@ -224,7 +240,30 @@ export function FiltersBar({
       if (v) set.add(v);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [options?.instituciones?.values, results]);
+  }, [options, results]);
+
+  const professionSuggestions = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const h of results) {
+      const many = Array.isArray(h?.profesiones) ? h.profesiones : null;
+      if (many && many.length > 0) {
+        for (const p of many) {
+          const v = String(p || "").trim();
+          if (v) set.add(v);
+        }
+      } else {
+        const v = String(h?.profesion || "").trim();
+        if (v) set.add(v);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [results]);
+
+  const filteredDeptValues = React.useMemo(() => {
+    const q = departmentSearch.trim().toLowerCase();
+    if (!q) return deptValues;
+    return deptValues.filter((d) => d.toLowerCase().includes(q));
+  }, [departmentSearch, deptValues]);
 
   const [selectedDepartamentos, setSelectedDepartamentos] = React.useState<string[]>(
     Array.isArray(filters.departamento) ? filters.departamento : [],
@@ -300,6 +339,7 @@ export function FiltersBar({
             variant="secondary"
             onClick={() => {
               setFilters(createInitialHospitalFilters());
+              setDepartmentSearch("");
               setSelectedDepartamentos([]);
               setSelectedInstituciones([]);
               setSelectedGd([]);
@@ -323,6 +363,70 @@ export function FiltersBar({
       >
         <div className="grid gap-3">
           <div className="rounded-[var(--radius-panel)] bg-white px-3 py-2 shadow-[var(--shadow-soft)]">
+            <div className="grid gap-2 px-2 py-2">
+              <div className="grid gap-0.5">
+                <SectionTitle>Carreras / Profesiones</SectionTitle>
+                <div className="text-xs font-medium text-[var(--label)]">Selecciona una opción</div>
+              </div>
+              {professionSuggestions.length ? (
+                <div className="grid max-h-[220px] gap-1 overflow-auto pr-1">
+                  {professionSuggestions.map((p) => (
+                    <AppleCheckbox
+                      key={p}
+                      label={p}
+                      checked={filters.profesion === p}
+                      onChange={() => setFilters((prev) => ({ ...prev, profesion: prev.profesion === p ? null : p }))}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="px-2 py-2 text-xs font-medium text-[var(--label)]">Sin opciones.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[var(--radius-panel)] bg-white px-3 py-2 shadow-[var(--shadow-soft)]">
+            <div className="grid gap-3 px-2 py-2">
+              <div className="grid gap-0.5">
+                <SectionTitle>SERUMS</SectionTitle>
+                <div className="text-xs font-medium text-[var(--label)]">Modalidad y proceso</div>
+              </div>
+
+              <div className="grid gap-1">
+                <div className="text-xs font-medium text-[var(--label)]">Proceso</div>
+                {[
+                  { label: "2025-1", value: "2025-I" },
+                  { label: "2025-2", value: "2025-II" },
+                ].map((p) => (
+                  <AppleCheckbox
+                    key={p.value}
+                    label={p.label}
+                    checked={filters.serums_periodo === p.value}
+                    onChange={() => setFilters((prev) => ({ ...prev, serums_periodo: prev.serums_periodo === p.value ? null : p.value }))}
+                  />
+                ))}
+              </div>
+
+              <div className="grid gap-1">
+                <div className="text-xs font-medium text-[var(--label)]">Modalidad</div>
+                {[
+                  { label: "Remunerado", value: "remunerado" },
+                  { label: "Equivalente", value: "equivalente" },
+                ].map((m) => (
+                  <AppleCheckbox
+                    key={m.value}
+                    label={m.label}
+                    checked={filters.serums_modalidad === m.value}
+                    onChange={() =>
+                      setFilters((prev) => ({ ...prev, serums_modalidad: prev.serums_modalidad === m.value ? null : m.value }))
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[var(--radius-panel)] bg-white px-3 py-2 shadow-[var(--shadow-soft)]">
               <button
               type="button"
               className="flex w-full items-center justify-between gap-3 px-2 py-2"
@@ -345,7 +449,13 @@ export function FiltersBar({
                 className="pr-1"
               >
                 <div className="grid gap-1 px-1 pb-2">
-                  {deptValues.map((d) => {
+                  <input
+                    value={departmentSearch}
+                    onChange={(e) => setDepartmentSearch(e.target.value)}
+                    placeholder="Escribe para buscar departamento..."
+                    className="h-9 w-full rounded-2xl border border-[var(--border)] bg-white px-3 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none focus:ring-2 focus:ring-black/5"
+                  />
+                  {filteredDeptValues.map((d) => {
                     const checked = selectedDepartamentos.includes(d);
                     const enabled = options.departamentos.enabled[d] ?? true;
                     return (
@@ -420,10 +530,12 @@ export function FiltersBar({
                       {instValues.map((i) => {
                         const checked = selectedInstituciones.includes(i);
                         const enabled = options.instituciones.enabled[i] ?? true;
+                        const display = abbreviateInstitutionForFilter(i);
                         return (
                           <AppleCheckbox
                             key={i}
-                            label={i}
+                            label={display.label}
+                            title={display.title}
                             checked={checked}
                             disabled={!enabled}
                             onChange={() => {

@@ -42,15 +42,9 @@ type PendingFavorite =
   | { item_type: "hospital"; item_id: string }
   | { item_type: "place"; item_id: string; name: string | null; lat: number; lon: number; meta: { group: string } };
 
-function MapLegendCard({
-  groups,
-  onToggle,
-}: {
-  groups: LegendGroups;
-  onToggle: (key: keyof LegendGroups) => void;
-}) {
+function MapLegendCard() {
   const [open, setOpen] = React.useState(false);
-  const [helpOpen, setHelpOpen] = React.useState(false);
+  const [infoOpen, setInfoOpen] = React.useState(false);
 
   const LegendPin = React.useCallback(({ color }: { color: string }) => {
     return (
@@ -79,22 +73,12 @@ function MapLegendCard({
     { key: "otros" as const, label: "Otros", color: "#EF4444", description: "Todos los demás" },
   ];
 
-  const clusterScale = [
-    { label: "1–10", color: "#22C55E" },
-    { label: "11–50", color: "#FBBF24" },
-    { label: "51–200", color: "#FB923C" },
-    { label: "200+", color: "#EF4444" },
+  const categorias = [
+    { label: "I-1", description: "Nivel I-1 (primer nivel de atención)" },
+    { label: "I-2", description: "Nivel I-2 (primer nivel de atención)" },
+    { label: "I-3", description: "Nivel I-3 (primer nivel de atención)" },
+    { label: "I-4", description: "Nivel I-4 (primer nivel de atención)" },
   ];
-
-  const gdScale = [
-    { label: "GD-1", color: "#22C55E" },
-    { label: "GD-2", color: "#84CC16" },
-    { label: "GD-3", color: "#FBBF24" },
-    { label: "GD-4", color: "#F97316" },
-    { label: "GD-5", color: "#EF4444" },
-  ];
-
-  const categorias = ["I-1", "I-2", "I-3", "I-4"];
 
   return (
     <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 shadow-[var(--shadow-soft)] backdrop-blur">
@@ -106,7 +90,7 @@ function MapLegendCard({
       >
         <div className="grid gap-0.5 text-left">
           <div className="text-sm font-semibold text-[var(--title)]">Leyenda</div>
-          <div className="text-xs font-medium text-[var(--label)]">Instituciones, categoría, GD y clusters</div>
+          <div className="text-xs font-medium text-[var(--label)]">Instituciones y categoría</div>
         </div>
         <svg
           width="18"
@@ -128,30 +112,24 @@ function MapLegendCard({
 
       <div
         className="transition-[max-height,opacity] duration-300 ease-out"
-        style={{ maxHeight: open ? "70vh" : 0, opacity: open ? 1 : 0, overflowY: open ? "scroll" : "hidden" }}
+        style={{ maxHeight: open ? "70vh" : 0, opacity: open ? 1 : 0, overflowY: open ? "auto" : "hidden" }}
       >
-        <div className="grid gap-3 px-5 pb-5 pr-4">
+        <div className="grid gap-3 px-5 pb-7 pr-5">
           <div className="grid gap-2">
             <div className="text-xs font-semibold text-[var(--title)]">Institución</div>
             <div className="grid gap-2">
               {institutions.map((i) => (
                 <div
                   key={i.label}
-                  className="flex items-center justify-between gap-3 rounded-[var(--radius-card)] bg-[var(--background-secondary)] px-3 py-2"
+                  className="flex items-center justify-start gap-3 rounded-[var(--radius-card)] bg-[var(--background-secondary)] px-3 py-2"
                 >
                   <div className="grid min-w-0 gap-0.5">
-                    <div className="text-xs font-semibold text-[var(--title)]">{i.label}</div>
-                    <div className="text-[11px] font-medium text-[var(--label)]">{i.description}</div>
+                    <div className="text-xs font-semibold text-[var(--title)]" title={i.description}>
+                      {i.label}
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="shrink-0">{LegendPin({ color: i.color })}</div>
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-[var(--accent)]"
-                      aria-label={`Mostrar ${i.label}`}
-                      checked={groups[i.key]}
-                      onChange={() => onToggle(i.key)}
-                    />
                   </div>
                 </div>
               ))}
@@ -162,80 +140,46 @@ function MapLegendCard({
             <div className="text-xs font-semibold text-[var(--title)]">Categoría</div>
             <div className="flex flex-wrap gap-2">
               {categorias.map((c) => (
-                <div key={c} className="flex items-center gap-2 rounded-full bg-[var(--background-secondary)] px-3 py-2">
-                  <div className="grid h-5 w-5 place-items-center rounded-full bg-white shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                    <span className="text-[11px] font-extrabold text-[var(--title)]">{c.replace("I-", "")}</span>
-                  </div>
-                  <span className="text-xs font-medium text-[var(--label)]">{c}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <div className="text-xs font-semibold text-[var(--title)]">Grado de dificultad (GD)</div>
-            <div className="flex flex-wrap gap-2">
-              {gdScale.map((g) => (
-                <div key={g.label} className="flex items-center gap-2 rounded-full bg-[var(--background-secondary)] px-3 py-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: g.color }} aria-hidden="true" />
-                  <span className="text-xs font-medium text-[var(--label)]">{g.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <div className="text-xs font-semibold text-[var(--title)]">Clusters</div>
-            <div className="grid grid-cols-2 gap-2">
-              {clusterScale.map((c) => (
                 <div
                   key={c.label}
-                  className="flex items-center gap-2 rounded-[var(--radius-card)] bg-[var(--background-secondary)] px-3 py-2"
+                  className="flex items-center gap-2 rounded-full bg-[var(--background-secondary)] px-3 py-2"
+                  title={c.description}
                 >
-                  <div
-                    className="grid h-6 w-6 place-items-center rounded-full border-2 border-white text-[11px] font-semibold text-[var(--title)] shadow-[var(--shadow-soft)]"
-                    style={{ background: c.color }}
-                    aria-hidden="true"
-                  >
-                    <span>•</span>
+                  <div className="grid h-5 w-5 place-items-center rounded-full bg-white shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+                    <span className="text-[11px] font-extrabold text-[var(--title)]">{c.label.replace("I-", "")}</span>
                   </div>
                   <span className="text-xs font-medium text-[var(--label)]">{c.label}</span>
                 </div>
               ))}
             </div>
-          </div>
 
-          <button
-            type="button"
-            className="w-fit rounded-full bg-black/[0.03] px-3 py-2 text-xs font-medium text-[var(--title)] hover:bg-black/[0.06]"
-            onClick={() => setHelpOpen((v) => !v)}
-            aria-expanded={helpOpen}
-          >
-            ¿Qué significan estos símbolos?
-          </button>
+            <div className="pt-2">
+              <button
+                type="button"
+                className="w-full rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 py-2 text-left text-xs font-semibold text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] hover:bg-black/[0.03]"
+                onClick={() => setInfoOpen((v) => !v)}
+                aria-expanded={infoOpen}
+              >
+                Definiciones clave
+              </button>
+              <div
+                className="mt-2 overflow-hidden transition-[max-height,opacity] duration-200 ease-out"
+                style={{ maxHeight: infoOpen ? "60vh" : 0, opacity: infoOpen ? 1 : 0 }}
+              >
+                <div className="rounded-[var(--radius-card)] border border-[var(--border)] bg-white p-3 shadow-[var(--shadow-soft)] mb-2">
 
-          <div
-            className="overflow-hidden rounded-[var(--radius-card)] bg-[var(--background-secondary)] transition-[max-height,opacity] duration-300 ease-out"
-            style={{ maxHeight: helpOpen ? 540 : 0, opacity: helpOpen ? 1 : 0 }}
-          >
-            <div className="grid gap-2 px-4 py-3">
-              <div className="text-xs font-semibold text-[var(--title)]">Guía rápida</div>
-              <ul className="text-xs font-medium text-[var(--label)] list-disc pl-4">
-                <li>Color del pin: grupo institucional (EsSalud, MINSA, FF.AA, Otros).</li>
-                <li>Número en el pin: categoría por pisos (I-1 a I-4).</li>
-                <li>Punto en el pin: GD (GD‑1 fácil → GD‑5 muy difícil).</li>
-                <li>Clusters: agrupan establecimientos según cantidad (verde 1–10, amarillo 11–50, naranja 51–200, rojo 200+).</li>
-              </ul>
-              <div className="mt-2 text-xs font-semibold text-[var(--title)]">Definiciones</div>
-              <ul className="text-xs font-medium text-[var(--label)] list-disc pl-4">
-                <li>I‑1: Con profesional de salud, no médico (en teoría).</li>
-                <li>I‑2: Con médico.</li>
-                <li>I‑3: + odontólogo + técnicos + patología.</li>
-                <li>I‑4: + imágenes + internamiento.</li>
-                <li>GD‑1 a GD‑5: Grado de dificultad geográfica (GD‑5 = zona muy remota).</li>
-                <li>ZAF: Zona de Atención Focalizada (zona prioritaria).</li>
-                <li>ZE: Zona de Emergencia.</li>
-              </ul>
+                  <div className="mt-3 text-xs font-semibold text-[var(--title)]">Definiciones</div>
+                  <ul className="mt-2 list-disc list-inside space-y-1 text-xs font-medium text-[var(--label)]">
+                    <li>I-1: Con profesional de salud, no médico.</li>
+                    <li>I-2: Con médico.</li>
+                    <li>I-3: + odontólogo + técnicos + patología.</li>
+                    <li>I-4: + imágenes e internamiento.</li>
+                    <li>GD-1 a GD-5: Grado de dificultad geográfica (GD-5 = zona muy remota).</li>
+                    <li>ZAF: Zona de Atención Focalizada (zona prioritaria).</li>
+                    <li>ZE: Zona de Emergencia.</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -330,12 +274,9 @@ export default function HomePage() {
     return "http://localhost:4000/api";
   }, []);
 
-  const [legendGroups, setLegendGroups] = React.useState<LegendGroups>({
-    essalud: true,
-    minsa: true,
-    ffaa: true,
-    otros: true,
-  });
+  const legendGroups = React.useMemo<LegendGroups>(() => {
+    return { essalud: true, minsa: true, ffaa: true, otros: true };
+  }, []);
 
   const normalizeInstitution = React.useCallback((value: string) => {
     return String(value || "")
@@ -432,6 +373,12 @@ export default function HomePage() {
   const [favoritesLoading, setFavoritesLoading] = React.useState(false);
   const [favoritesError, setFavoritesError] = React.useState<string | null>(null);
   const [pendingFavorite, setPendingFavorite] = React.useState<PendingFavorite | null>(null);
+  const [favoritesView, setFavoritesView] = React.useState<"map" | "favoritos">("map");
+  const [notesDraftByFavoriteId, setNotesDraftByFavoriteId] = React.useState<Record<string, string>>({});
+  const [notesSavingId, setNotesSavingId] = React.useState<string | null>(null);
+  const [notesError, setNotesError] = React.useState<string | null>(null);
+  const [favoritesSearch, setFavoritesSearch] = React.useState("");
+  const [notesOpenByFavoriteId, setNotesOpenByFavoriteId] = React.useState<Record<string, boolean>>({});
 
   const setAuthQuery = React.useCallback((mode: "login" | "register" | null) => {
     if (typeof window === "undefined") return;
@@ -450,6 +397,23 @@ export default function HomePage() {
     const next = url.searchParams.toString();
     window.history.replaceState({}, "", `${url.pathname}${next ? `?${next}` : ""}${url.hash}`);
   }, []);
+
+  const setViewQuery = React.useCallback((view: "map" | "favoritos") => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (view === "favoritos") url.searchParams.set("view", "favoritos");
+    else url.searchParams.delete("view");
+    const next = url.searchParams.toString();
+    window.history.replaceState({}, "", `${url.pathname}${next ? `?${next}` : ""}${url.hash}`);
+    setFavoritesView(view);
+    if (view === "favoritos") {
+      setSidebarOpen(false);
+      setDetailOpen(false);
+      setSelectedHospital(null);
+      setSelectedHospitalId(null);
+      setHospitalQuery(null);
+    }
+  }, [setHospitalQuery]);
 
   const openAuth = React.useCallback(
     (mode: "login" | "register") => {
@@ -493,6 +457,88 @@ export default function HomePage() {
       setFavoritesLoading(false);
     }
   }, [apiBase, extractApiErrorMessage]);
+
+  const extractNotes = React.useCallback((meta: unknown) => {
+    if (!meta || typeof meta !== "object") return "";
+    const m = meta as { notes?: unknown };
+    return typeof m.notes === "string" ? m.notes : "";
+  }, []);
+
+  React.useEffect(() => {
+    setNotesDraftByFavoriteId((prev) => {
+      const next: Record<string, string> = { ...prev };
+      for (const f of favorites) {
+        if (!(f.id in next)) next[f.id] = extractNotes(f.meta);
+      }
+      return next;
+    });
+  }, [extractNotes, favorites]);
+
+  const filteredFavorites = React.useMemo(() => {
+    const q = normalizeText(favoritesSearch);
+    if (!q) return favorites;
+    return favorites.filter((fav) => {
+      const title =
+        fav.item_type === "hospital"
+          ? fav.hospital?.nombre_establecimiento || fav.name || fav.item_id
+          : fav.name || fav.item_id;
+      const haystack =
+        fav.item_type === "hospital" && fav.hospital
+          ? [
+              title,
+              fav.hospital.institucion,
+              fav.hospital.departamento,
+              fav.hospital.provincia,
+              fav.hospital.distrito,
+              fav.hospital.categoria,
+              fav.hospital.nombre_establecimiento,
+              fav.hospital.codigo_renipress_modular,
+            ]
+          : [title, "lugar", fav.item_type];
+      return normalizeText(haystack.filter(Boolean).join(" ")).includes(q);
+    });
+  }, [favorites, favoritesSearch]);
+
+  const saveFavoriteNotes = React.useCallback(
+    async (fav: FavoriteItem) => {
+      const token = getAuthToken();
+      if (!token) {
+        openAuth("login");
+        return;
+      }
+      setNotesSavingId(fav.id);
+      setNotesError(null);
+      try {
+        const current = notesDraftByFavoriteId[fav.id] ?? "";
+        const baseMeta = fav.meta && typeof fav.meta === "object" ? (fav.meta as Record<string, unknown>) : {};
+        const meta = { ...baseMeta, notes: current };
+        const body =
+          fav.item_type === "hospital"
+            ? { item_type: "hospital" as const, item_id: fav.item_id, meta }
+            : {
+                item_type: "place" as const,
+                item_id: fav.item_id,
+                name: fav.name,
+                lat: fav.lat,
+                lon: fav.lon,
+                meta,
+              };
+        const r = await fetch(`${apiBase}/favoritos`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const json = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(extractApiErrorMessage(json, "No se pudo guardar la nota."));
+        await refreshFavorites();
+      } catch (e) {
+        setNotesError(e instanceof Error ? e.message : "No se pudo guardar la nota.");
+      } finally {
+        setNotesSavingId(null);
+      }
+    },
+    [apiBase, extractApiErrorMessage, notesDraftByFavoriteId, openAuth, refreshFavorites],
+  );
 
   const refreshAuthRole = React.useCallback(async () => {
     const token = getAuthToken();
@@ -564,6 +610,8 @@ export default function HomePage() {
     [apiBase, extractApiErrorMessage, openAuth, refreshFavorites],
   );
 
+  // moved below handleSelectHospital to avoid TDZ
+
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -572,6 +620,13 @@ export default function HomePage() {
       setAuthMode(auth);
       setAuthOpen(true);
     }
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get("view");
+    setFavoritesView(view === "favoritos" ? "favoritos" : "map");
   }, []);
 
   React.useEffect(() => {
@@ -649,7 +704,7 @@ export default function HomePage() {
       setDetailOpen(false);
       setHospitalQuery(null);
     }
-  }, [filteredHospitals, selectedHospitalId]);
+  }, [filteredHospitals, selectedHospitalId, setHospitalQuery]);
 
   React.useEffect(() => {
     const query = searchValue.trim();
@@ -1178,6 +1233,38 @@ export default function HomePage() {
     [handleSelectHospital],
   );
 
+  const handleSelectFavorite = React.useCallback(
+    (fav: FavoriteItem) => {
+      if (fav.item_type === "hospital" && fav.hospital) {
+        const h: HospitalMapItem = {
+          id: fav.hospital.id,
+          profesion: fav.hospital.profesion || "",
+          profesiones: fav.hospital.profesiones || [],
+          institucion: fav.hospital.institucion || "",
+          departamento: fav.hospital.departamento || "",
+          provincia: fav.hospital.provincia || "",
+          distrito: fav.hospital.distrito || "",
+          grado_dificultad: fav.hospital.grado_dificultad || "",
+          codigo_renipress_modular: fav.hospital.codigo_renipress_modular || fav.hospital.id,
+          nombre_establecimiento: fav.hospital.nombre_establecimiento || fav.hospital.id,
+          categoria: fav.hospital.categoria || "",
+          zaf: fav.hospital.zaf || "",
+          ze: fav.hospital.ze || "",
+          lat: Number(fav.hospital.lat || 0),
+          lng: Number(fav.hospital.lng || 0),
+        };
+        handleSelectHospital(h);
+        if (favoritesView === "favoritos") setViewQuery("map");
+        return;
+      }
+      if (fav.item_type === "place" && fav.lat != null && fav.lon != null) {
+        setFocus({ lat: fav.lat, lng: fav.lon, zoom: 16 });
+        if (favoritesView === "favoritos") setViewQuery("map");
+      }
+    },
+    [favoritesView, handleSelectHospital, setViewQuery],
+  );
+
   const hospitalsForMap = React.useMemo(() => {
     if (!selectedHospital) return filteredHospitals;
     const idx = filteredHospitals.findIndex((x) => x.id === selectedHospital.id);
@@ -1192,20 +1279,6 @@ export default function HomePage() {
   const hospitalsForMapAfterLegend = React.useMemo(() => {
     return hospitalsForMap.filter((h) => legendGroups[groupInstitution(h.institucion)]);
   }, [groupInstitution, hospitalsForMap, legendGroups]);
-
-  const topHospitals = React.useMemo(() => {
-    const base = hospitalsForMapAfterLegend.slice();
-    if (userLocation) {
-      base.sort((a, b) => {
-        const da = haversineMeters(userLocation, { lat: a.lat, lng: a.lng });
-        const db = haversineMeters(userLocation, { lat: b.lat, lng: b.lng });
-        return da - db;
-      });
-      return base.slice(0, 5);
-    }
-    base.sort((a, b) => a.nombre_establecimiento.localeCompare(b.nombre_establecimiento));
-    return base.slice(0, 5);
-  }, [hospitalsForMapAfterLegend, userLocation]);
 
   const directDistanceMeters = React.useMemo(() => {
     if (!selectedHospital || !userLocation) return null;
@@ -1269,40 +1342,20 @@ export default function HomePage() {
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-slate-50">
-      <div className="flex h-full flex-col">
+      <div className="flex h-full min-h-0 flex-col">
       <AppHeader
         onOpenFilters={() => setSidebarOpen(true)}
         onCenterOnUser={handleCenterOnUser}
         centerOnUserLoading={centerOnUserLoading}
         onOpenAuth={openAuth}
+        onOpenFavoritesPanel={() => {
+          setViewQuery("favoritos");
+        }}
         favorites={favorites}
         favoritesLoading={favoritesLoading}
         favoritesError={favoritesError}
         onRefreshFavorites={refreshFavorites}
-        onSelectFavorite={(fav) => {
-          if (fav.item_type === "hospital" && fav.hospital) {
-            const h: HospitalMapItem = {
-              id: fav.hospital.id,
-              profesion: fav.hospital.profesion || "",
-              profesiones: fav.hospital.profesiones || [],
-              institucion: fav.hospital.institucion || "",
-              departamento: fav.hospital.departamento || "",
-              provincia: fav.hospital.provincia || "",
-              distrito: fav.hospital.distrito || "",
-              grado_dificultad: fav.hospital.grado_dificultad || "",
-              codigo_renipress_modular: fav.hospital.codigo_renipress_modular || fav.hospital.id,
-              nombre_establecimiento: fav.hospital.nombre_establecimiento || fav.hospital.id,
-              categoria: fav.hospital.categoria || "",
-              zaf: fav.hospital.zaf || "",
-              ze: fav.hospital.ze || "",
-              lat: Number(fav.hospital.lat || 0),
-              lng: Number(fav.hospital.lng || 0),
-            };
-            handleSelectHospital(h);
-          } else if (fav.item_type === "place" && fav.lat != null && fav.lon != null) {
-            setFocus({ lat: fav.lat, lng: fav.lon, zoom: 16 });
-          }
-        }}
+        onSelectFavorite={handleSelectFavorite}
         onRemoveFavorite={(fav) => removeFavorite({ item_type: fav.item_type, item_id: fav.item_id })}
         searchValue={searchValue}
         searchLoading={searchLoading}
@@ -1315,134 +1368,428 @@ export default function HomePage() {
         onRetrySearch={() => setSearchNonce((n) => n + 1)}
       />
 
-      <div className="relative flex-1 overflow-hidden">
-        <HospitalMap
-          hospitals={hospitalsForMapAfterLegend}
-          selectedHospitalId={selectedHospitalId}
-          loading={loading}
-          userLocation={userLocation}
-          route={routeForMap}
-          routeLoading={routeLoading || airportLoading}
-          nearby={nearby}
-          nearbyPlaces={nearbyPlacesForMap}
-          hoveredNearbyId={hoveredNearbyId}
-          selectedNearbyId={selectedNearbyId}
-          focusNearbyId={focusNearbyId}
-          nearbyLoading={nearbyLoading}
-          focus={focus}
-          onSelectHospital={handleSelectHospital}
-        />
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        {favoritesView === "favoritos" ? (
+          <div className="h-full overflow-auto bg-white">
+            <div className="mx-auto w-full max-w-6xl px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#007AFF] shadow-[0_8px_18px_rgba(0,122,255,0.22)]">
+                    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true">
+                      <path
+                        d="M20.3 7.6a4.6 4.6 0 0 0-6.5 0L12 9.4l-1.8-1.8a4.6 4.6 0 0 0-6.5 6.5l1.8 1.8L12 21l6.5-5.1 1.8-1.8a4.6 4.6 0 0 0 0-6.5Z"
+                        stroke="rgba(255,255,255,0.98)"
+                        strokeWidth="1.5"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-2xl font-semibold tracking-[-0.01em] text-[#1D1D1F]">Favoritos</div>
+                    <div className="mt-1 text-sm font-medium text-[#86868B]">Notas y accesos rápidos</div>
+                  </div>
+                </div>
 
-        <div className="absolute right-3 top-3 z-[1200] hidden sm:block">
-          <div className="grid gap-2">
-            <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur">
-              <div className="text-sm font-semibold text-[var(--title)]">
-                {loading ? "Cargando…" : `${hospitalsForMapAfterLegend.length} establecimientos`}
-              </div>
-              <div className="mt-1 text-xs font-medium text-[var(--label)]">
-                {error
-                  ? error
-                  : locationError
-                    ? locationError
-                    : searchError
-                      ? searchError
-                      : "Selecciona un marcador para ver el detalle."}
-              </div>
-            </div>
-
-            <MapLegendCard
-              groups={legendGroups}
-              onToggle={(key) => {
-                setLegendGroups((prev) => ({ ...prev, [key]: !prev[key] }));
-              }}
-            />
-
-            {activeTrip && activeTripSummary ? (
-              <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur">
-                <div className="text-[11px] font-semibold text-[var(--title)]">Ruta activa · {activeTripSummary.label}</div>
-                <div className="mt-0.5 line-clamp-1 text-xs font-medium text-[var(--label)]">{activeTrip.hospitalName}</div>
-                {activeTripSummary.metric ? (
-                  <div className="mt-0.5 text-[11px] font-medium text-[var(--label)]">{activeTripSummary.metric}</div>
-                ) : null}
-                <div className="mt-2">
-                  <Button size="sm" variant="secondary" className="w-full" onClick={clearActiveTrip}>
-                    Cancelar ruta
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-10 rounded-full border border-[#E5E5E7] bg-white px-4 text-sm font-semibold text-[#1D1D1F] hover:bg-black/[0.03]"
+                    onClick={refreshFavorites}
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                      <path
+                        d="M20 12a8 8 0 1 1-2.34-5.66"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M20 4v6h-6"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    Actualizar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-10 rounded-full bg-[#0B5FFF] px-4 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(11,95,255,0.28)] hover:brightness-105"
+                    onClick={() => setViewQuery("map")}
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                      <path
+                        d="M9 20l-5-2V6l5 2 6-2 5 2v12l-5-2-6 2Z"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M9 8v12"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M15 6v12"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    Volver al mapa
                   </Button>
                 </div>
               </div>
-            ) : null}
-          </div>
-        </div>
 
-        <div className="absolute left-0 top-0 z-[2000] hidden h-full sm:block">
-          <div
-            className={cn(
-              "h-full w-[392px] p-3 transition-transform duration-300 ease-out",
-              sidebarOpen ? "translate-x-0" : "-translate-x-full",
-            )}
-          >
-            <FiltersBar
-              filters={filters}
-              setFilters={setFilters}
-              options={options}
-              results={topHospitals}
+              <div className="mt-3">
+                <div className="relative">
+                  <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#86868B]">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+                      <path
+                        d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      />
+                      <path d="M16 16l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <input
+                    value={favoritesSearch}
+                    onChange={(e) => setFavoritesSearch(e.target.value)}
+                    placeholder="Buscar en favoritos..."
+                    className="h-12 w-full rounded-2xl border border-[#E5E5E7] bg-[#F5F5F7] pl-12 pr-4 text-sm font-medium text-[#1D1D1F] shadow-[0_4px_12px_rgba(0,0,0,0.06)] outline-none ring-0 placeholder:text-[#86868B] focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,122,255,0.15)]"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-2 text-xs font-medium text-[var(--label)]">
+                {favoritesEnabled ? `${filteredFavorites.length} guardados` : "Inicia sesión para ver tus favoritos"}
+              </div>
+            </div>
+
+            <div className="border-t border-[var(--border)]" />
+
+            <div className="mx-auto w-full max-w-6xl px-4 pb-10 pt-3">
+              {notesError ? (
+                <div className="mb-3 rounded-[var(--radius-card)] bg-white px-4 py-3 text-sm font-medium text-red-600 shadow-[var(--shadow-soft)]">
+                  {notesError}
+                </div>
+              ) : null}
+
+              {!favoritesEnabled ? (
+                <div className="rounded-[var(--radius-panel)] bg-white px-5 py-4 shadow-[var(--shadow-soft)]">
+                  <div className="text-sm font-semibold text-[var(--title)]">Inicia sesión</div>
+                  <div className="mt-1 text-xs font-medium text-[var(--label)]">Para ver y editar tus favoritos.</div>
+                  <div className="mt-3 flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="rounded-full bg-[#007AFF] px-5 text-white hover:brightness-105"
+                      onClick={() => openAuth("login")}
+                    >
+                      Iniciar sesión
+                    </Button>
+                  </div>
+                </div>
+              ) : favoritesLoading ? (
+                <div className="rounded-[var(--radius-panel)] bg-white px-5 py-4 shadow-[var(--shadow-soft)]">
+                  <div className="text-sm font-semibold text-[var(--title)]">Cargando…</div>
+                </div>
+              ) : favoritesError ? (
+                <div className="rounded-[var(--radius-panel)] bg-white px-5 py-4 shadow-[var(--shadow-soft)]">
+                  <div className="text-sm font-semibold text-[var(--title)]">Error</div>
+                  <div className="mt-1 text-xs font-medium text-[var(--label)]">{favoritesError}</div>
+                </div>
+              ) : filteredFavorites.length === 0 ? (
+                <div className="rounded-[var(--radius-panel)] bg-white px-5 py-4 shadow-[var(--shadow-soft)]">
+                  <div className="text-sm font-semibold text-[var(--title)]">Sin favoritos</div>
+                  <div className="mt-1 text-xs font-medium text-[var(--label)]">
+                    {favoritesSearch.trim() ? "No hay resultados para tu búsqueda." : "Marca establecimientos con el corazón para que aparezcan aquí."}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {filteredFavorites.map((fav) => {
+                    const title =
+                      fav.item_type === "hospital"
+                        ? fav.hospital?.nombre_establecimiento || fav.name || fav.item_id
+                        : fav.name || fav.item_id;
+                    const subtitle =
+                      fav.item_type === "hospital" && fav.hospital
+                        ? `${fav.hospital.institucion || ""}${fav.hospital.departamento ? ` - ${fav.hospital.departamento}` : ""}`
+                        : fav.item_type === "place"
+                        ? "Lugar"
+                        : "";
+                    const notesValue = notesDraftByFavoriteId[fav.id] ?? "";
+                    const inst = fav.item_type === "hospital" ? String(fav.hospital?.institucion || "") : "";
+                    const instLower = inst.toLowerCase();
+                    const instColor = instLower.includes("essalud")
+                      ? "#38BDF8"
+                      : instLower.includes("minsa")
+                      ? "#FBBF24"
+                      : instLower.includes("fap") ||
+                        instLower.includes("ffaa") ||
+                        instLower.includes("pnp") ||
+                        instLower.includes("marina") ||
+                        instLower.includes("ejército") ||
+                        instLower.includes("ejercito")
+                      ? "#22C55E"
+                      : "#EF4444";
+                    const nivel = fav.item_type === "hospital" ? String(fav.hospital?.categoria || "").trim() : "";
+                    const notesOpen = !!notesOpenByFavoriteId[fav.id];
+                    const location = fav.item_type === "hospital" ? String(fav.hospital?.departamento || "").trim() : "";
+                    return (
+                      <div key={fav.id} className="relative overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white">
+                        <div className="absolute left-0 top-0 h-full w-[2px] bg-[#0B5FFF]/80" aria-hidden="true" />
+                        <div className="flex items-start justify-between gap-3 px-4 py-3">
+                          <button type="button" className="min-w-0 text-left" onClick={() => handleSelectFavorite(fav)}>
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 text-[var(--label)]">
+                                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+                                  <path
+                                    d="M12 3.8l2.47 5.24 5.78.78-4.22 4.06 1.04 5.74L12 16.9 6.93 19.7l1.04-5.74-4.22-4.06 5.78-.78L12 3.8Z"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              </div>
+                              <div className="min-w-0">
+                                <div className="line-clamp-1 text-xs font-semibold text-[var(--title)]">{title}</div>
+                                <div className="mt-1 flex items-center gap-2 text-[11px] font-medium text-[var(--label)]">
+                                  <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: instColor }} />
+                                  <span className="line-clamp-1">{subtitle || "—"}</span>
+                                </div>
+                                {location ? (
+                                  <div className="mt-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--label)]">
+                                    {location}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </button>
+
+                          <div className="flex shrink-0 items-center gap-2">
+                            {nivel ? (
+                              <span className="inline-flex h-7 min-w-[2.25rem] items-center justify-center rounded-full border border-[#CDE1FF] bg-[#EEF5FF] px-3 text-xs font-semibold tracking-wide text-[#1D1D1F]">
+                                {nivel}
+                              </span>
+                            ) : null}
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-8 rounded-xl border border-[var(--border)] px-3 text-xs text-[var(--title)] transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                              onClick={() => removeFavorite({ item_type: fav.item_type, item_id: fav.item_id })}
+                            >
+                              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                                <path d="M4 7h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                <path d="M10 11v7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                <path d="M14 11v7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                <path d="M6 7l1 14h10l1-14" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                                <path d="M9 7V4h6v3" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                              </svg>
+                              Quitar
+                            </Button>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-2 text-left"
+                          onClick={() =>
+                            setNotesOpenByFavoriteId((prev) => ({ ...prev, [fav.id]: !(prev[fav.id] ?? false) }))
+                          }
+                          aria-expanded={notesOpen}
+                        >
+                          <div className="text-xs font-semibold text-[var(--title)]">Notas</div>
+                          <div className="text-[var(--label)]">
+                            <svg
+                              viewBox="0 0 24 24"
+                              className={notesOpen ? "h-5 w-5 rotate-180" : "h-5 w-5"}
+                              fill="none"
+                              aria-hidden="true"
+                            >
+                              <path
+                                d="M6 9l6 6 6-6"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                        </button>
+
+                        <div
+                          className="overflow-hidden transition-[max-height,opacity] duration-200 ease-out"
+                          style={{ maxHeight: notesOpen ? 260 : 0, opacity: notesOpen ? 1 : 0 }}
+                        >
+                          <div className="px-4 pb-4 pt-3">
+                            <div className="rounded-[14px] bg-[#F3F4F6] p-3 ring-1 ring-inset ring-[#E5E7EB]/70 transition-shadow focus-within:ring-[#D0D5DD]">
+                              <textarea
+                                value={notesValue}
+                                onChange={(e) => setNotesDraftByFavoriteId((prev) => ({ ...prev, [fav.id]: e.target.value }))}
+                                rows={4}
+                                className="h-28 w-full resize-none border-0 bg-transparent text-sm font-medium text-[var(--title)] placeholder-[#A0A4AB] outline-none"
+                                placeholder="Escribe una nota…"
+                              />
+                            </div>
+                            <div className="mt-2 flex items-center justify-end">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="h-8 rounded-full bg-[#007AFF] px-4 text-white hover:brightness-105"
+                                onClick={() => saveFavoriteNotes(fav)}
+                                disabled={notesSavingId === fav.id}
+                              >
+                                {notesSavingId === fav.id ? "Guardando…" : "Guardar"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <HospitalMap
+              hospitals={hospitalsForMapAfterLegend}
               selectedHospitalId={selectedHospitalId}
-              onSelectHospital={handleSelectHospital}
+              loading={loading}
               userLocation={userLocation}
+              route={routeForMap}
+              routeLoading={routeLoading || airportLoading}
+              nearby={nearby}
+              nearbyPlaces={nearbyPlacesForMap}
+              hoveredNearbyId={hoveredNearbyId}
+              selectedNearbyId={selectedNearbyId}
+              focusNearbyId={focusNearbyId}
+              nearbyLoading={nearbyLoading}
+              focus={focus}
+              onSelectHospital={handleSelectHospital}
             />
-          </div>
 
-          <button
-            type="button"
-            className={cn(
-              "absolute top-5 z-[2100] rounded-2xl bg-white px-2 py-2 text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]",
-              sidebarOpen ? "left-[404px]" : "left-3",
-            )}
-            onClick={() => setSidebarOpen((v) => !v)}
-            aria-label={sidebarOpen ? "Ocultar panel lateral" : "Mostrar panel lateral"}
-            title={sidebarOpen ? "Ocultar panel lateral" : "Mostrar panel lateral"}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d={sidebarOpen ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"}
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            <div className="absolute right-3 top-3 z-[1200] hidden sm:block">
+              <div className="grid gap-2">
+                <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur">
+                  <div className="text-sm font-semibold text-[var(--title)]">
+                    {loading ? "Cargando…" : `${hospitalsForMapAfterLegend.length} establecimientos`}
+                  </div>
+                  <div className="mt-1 text-xs font-medium text-[var(--label)]">
+                    {error
+                      ? error
+                      : locationError
+                        ? locationError
+                        : searchError
+                          ? searchError
+                          : "Selecciona un marcador para ver el detalle."}
+                  </div>
+                </div>
+
+                <MapLegendCard />
+
+                {activeTrip && activeTripSummary ? (
+                  <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur">
+                    <div className="text-[11px] font-semibold text-[var(--title)]">
+                      Ruta activa · {activeTripSummary.label}
+                    </div>
+                    <div className="mt-0.5 line-clamp-1 text-xs font-medium text-[var(--label)]">{activeTrip.hospitalName}</div>
+                    {activeTripSummary.metric ? (
+                      <div className="mt-0.5 text-[11px] font-medium text-[var(--label)]">{activeTripSummary.metric}</div>
+                    ) : null}
+                    <div className="mt-2">
+                      <Button size="sm" variant="secondary" className="w-full" onClick={clearActiveTrip}>
+                        Cancelar ruta
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="absolute left-0 top-0 z-[2000] hidden h-full sm:block">
+              <div
+                className={cn(
+                  "h-full w-[392px] p-3 transition-transform duration-300 ease-out",
+                  sidebarOpen ? "translate-x-0" : "-translate-x-full",
+                )}
+              >
+                <FiltersBar
+                  filters={filters}
+                  setFilters={setFilters}
+                  options={options}
+                  results={hospitalsForMapAfterLegend}
+                  selectedHospitalId={selectedHospitalId}
+                  onSelectHospital={handleSelectHospital}
+                  userLocation={userLocation}
+                />
+              </div>
+
+              <button
+                type="button"
+                className={cn(
+                  "absolute top-5 z-[2100] rounded-2xl bg-white px-2 py-2 text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]",
+                  sidebarOpen ? "left-[404px]" : "left-3",
+                )}
+                onClick={() => setSidebarOpen((v) => !v)}
+                aria-label={sidebarOpen ? "Ocultar panel lateral" : "Mostrar panel lateral"}
+                title={sidebarOpen ? "Ocultar panel lateral" : "Mostrar panel lateral"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d={sidebarOpen ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"}
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div
+              className={cn(
+                "absolute inset-0 z-[2500] sm:hidden",
+                sidebarOpen ? "pointer-events-auto" : "pointer-events-none",
+              )}
+              aria-hidden={!sidebarOpen}
+            >
+              <div
+                className={cn(
+                  "absolute inset-0 bg-black/20 transition-opacity",
+                  sidebarOpen ? "opacity-100" : "opacity-0",
+                )}
+                onClick={() => setSidebarOpen(false)}
               />
-            </svg>
-          </button>
-        </div>
+              <div
+                className={cn(
+                  "absolute left-0 top-0 h-full w-[92%] max-w-[420px] p-3 transition-transform duration-300 ease-out",
+                  sidebarOpen ? "translate-x-0" : "-translate-x-full",
+                )}
+              >
+                <FiltersBar
+                  filters={filters}
+                  setFilters={setFilters}
+                  options={options}
+                  results={hospitalsForMapAfterLegend}
+                  selectedHospitalId={selectedHospitalId}
+                  onSelectHospital={handleSelectHospital}
+                  userLocation={userLocation}
+                  onCloseMobile={() => setSidebarOpen(false)}
+                />
+              </div>
+            </div>
 
-        <div
-          className={cn(
-            "absolute inset-0 z-[2500] sm:hidden",
-            sidebarOpen ? "pointer-events-auto" : "pointer-events-none",
-          )}
-          aria-hidden={!sidebarOpen}
-        >
-          <div
-            className={cn("absolute inset-0 bg-black/20 transition-opacity", sidebarOpen ? "opacity-100" : "opacity-0")}
-            onClick={() => setSidebarOpen(false)}
-          />
-          <div
-            className={cn(
-              "absolute left-0 top-0 h-full w-[92%] max-w-[420px] p-3 transition-transform duration-300 ease-out",
-              sidebarOpen ? "translate-x-0" : "-translate-x-full",
-            )}
-          >
-            <FiltersBar
-              filters={filters}
-              setFilters={setFilters}
-              options={options}
-              results={topHospitals}
-              selectedHospitalId={selectedHospitalId}
-              onSelectHospital={handleSelectHospital}
-              userLocation={userLocation}
-              onCloseMobile={() => setSidebarOpen(false)}
-            />
-          </div>
-        </div>
+          </>
+        )}
       </div>
       </div>
 

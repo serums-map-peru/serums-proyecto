@@ -14,11 +14,11 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    "bg-[var(--accent)] text-white hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed",
+    "bg-[var(--primary)] text-[var(--primary-foreground)] hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed",
   secondary:
-    "bg-white text-[var(--title)] hover:bg-black/[0.03] disabled:opacity-60 disabled:cursor-not-allowed",
+    "bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:brightness-98 disabled:opacity-60 disabled:cursor-not-allowed",
   ghost:
-    "bg-transparent text-[var(--title)] hover:bg-black/[0.03] disabled:opacity-60 disabled:cursor-not-allowed",
+    "bg-transparent text-[var(--foreground)] hover:bg-[var(--accent)] disabled:opacity-60 disabled:cursor-not-allowed",
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -37,7 +37,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-medium shadow-[0_1px_0_rgba(0,0,0,0.04)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+        "inline-flex items-center justify-center gap-2 rounded-xl font-medium shadow-[0_1px_0_rgba(0,0,0,0.04)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
         variantClasses[variant],
         sizeClasses[size],
         className,

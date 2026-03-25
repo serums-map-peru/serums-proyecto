@@ -303,7 +303,7 @@ export function AuthModal({ open, mode, onClose, onChangeMode, onAuthChange }: A
                         aria-invalid={!!(touched.firstName && fieldErrors.firstName)}
                         aria-describedby={touched.firstName && fieldErrors.firstName ? "auth-firstname-error" : undefined}
                         className={cn(
-                          "h-10 w-full rounded-xl border bg-white px-3 text-sm font-medium text-[var(--title)] outline-none focus:ring-2 focus:ring-[var(--accent)]/20",
+                          "h-10 w-full rounded-xl border bg-white px-3 text-sm font-medium text-[var(--title)] outline-none focus:ring-2 focus:ring-[var(--ring)]/40",
                           touched.firstName && fieldErrors.firstName ? "border-red-500" : "border-[var(--border)]",
                         )}
                         placeholder="Tu nombre"
@@ -333,7 +333,7 @@ export function AuthModal({ open, mode, onClose, onChangeMode, onAuthChange }: A
                         aria-invalid={!!(touched.lastName && fieldErrors.lastName)}
                         aria-describedby={touched.lastName && fieldErrors.lastName ? "auth-lastname-error" : undefined}
                         className={cn(
-                          "h-10 w-full rounded-xl border bg-white px-3 text-sm font-medium text-[var(--title)] outline-none focus:ring-2 focus:ring-[var(--accent)]/20",
+                          "h-10 w-full rounded-xl border bg-white px-3 text-sm font-medium text-[var(--title)] outline-none focus:ring-2 focus:ring-[var(--ring)]/40",
                           touched.lastName && fieldErrors.lastName ? "border-red-500" : "border-[var(--border)]",
                         )}
                         placeholder="Tu apellido"
@@ -370,7 +370,7 @@ export function AuthModal({ open, mode, onClose, onChangeMode, onAuthChange }: A
                     aria-invalid={!!(touched.email && fieldErrors.email)}
                     aria-describedby={touched.email && fieldErrors.email ? "auth-email-error" : undefined}
                     className={cn(
-                      "h-10 w-full rounded-xl border bg-white px-3 text-sm font-medium text-[var(--title)] outline-none focus:ring-2 focus:ring-[var(--accent)]/20",
+                      "h-10 w-full rounded-xl border bg-white px-3 text-sm font-medium text-[var(--title)] outline-none focus:ring-2 focus:ring-[var(--ring)]/40",
                       touched.email && fieldErrors.email ? "border-red-500" : "border-[var(--border)]",
                     )}
                     placeholder="tu@email.com"
@@ -406,7 +406,7 @@ export function AuthModal({ open, mode, onClose, onChangeMode, onAuthChange }: A
                     aria-invalid={!!(touched.password && fieldErrors.password)}
                     aria-describedby={touched.password && fieldErrors.password ? "auth-password-error" : undefined}
                     className={cn(
-                      "h-10 w-full rounded-xl border bg-white px-3 text-sm font-medium text-[var(--title)] outline-none focus:ring-2 focus:ring-[var(--accent)]/20",
+                      "h-10 w-full rounded-xl border bg-white px-3 text-sm font-medium text-[var(--title)] outline-none focus:ring-2 focus:ring-[var(--ring)]/40",
                       touched.password && fieldErrors.password ? "border-red-500" : "border-[var(--border)]",
                     )}
                     placeholder={mode === "register" ? "Mínimo 8 caracteres" : "••••••••"}
