@@ -81,7 +81,7 @@ function MapLegendCard() {
   ];
 
   return (
-    <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 shadow-[var(--shadow-soft)] backdrop-blur">
+    <div className="w-[320px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 shadow-[var(--shadow-soft)] backdrop-blur">
       <button
         type="button"
         className="flex w-full items-center justify-between gap-3 px-5 py-4"
@@ -1712,6 +1712,45 @@ export default function HomePage() {
                     </div>
                   </div>
                 ) : null}
+              </div>
+            </div>
+
+            <div className="absolute left-3 right-3 top-3 z-[1200] sm:hidden">
+              <div className="mx-auto w-full max-w-[520px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur">
+                <div className="text-sm font-semibold text-[var(--title)]">
+                  {loading ? "Cargando…" : `${hospitalsForMapAfterLegend.length} establecimientos`}
+                </div>
+                <div className="mt-1 text-xs font-medium text-[var(--label)]">
+                  {error
+                    ? error
+                    : locationError
+                      ? locationError
+                      : searchError
+                        ? searchError
+                        : "Selecciona un marcador para ver el detalle."}
+                </div>
+              </div>
+            </div>
+
+            <div className="absolute bottom-3 left-3 right-3 z-[1200] sm:hidden">
+              <div className="mx-auto grid w-full max-w-[520px] justify-items-center gap-2">
+                {activeTrip && activeTripSummary ? (
+                  <div className="overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur">
+                    <div className="text-[11px] font-semibold text-[var(--title)]">
+                      Ruta activa · {activeTripSummary.label}
+                    </div>
+                    <div className="mt-0.5 line-clamp-1 text-xs font-medium text-[var(--label)]">{activeTrip.hospitalName}</div>
+                    {activeTripSummary.metric ? (
+                      <div className="mt-0.5 text-[11px] font-medium text-[var(--label)]">{activeTripSummary.metric}</div>
+                    ) : null}
+                    <div className="mt-2">
+                      <Button size="sm" variant="secondary" className="w-full" onClick={clearActiveTrip}>
+                        Cancelar ruta
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+                <MapLegendCard />
               </div>
             </div>
 
