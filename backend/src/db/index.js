@@ -8,6 +8,7 @@ const bcrypt = require("bcryptjs");
 const DB_ENABLED = getEnvNumber("DB_ENABLED", 1) !== 0;
 const DB_PATH = path.resolve(getEnvString("DB_PATH", path.resolve(__dirname, "../data/serums.db")));
 const DB_JOURNAL_MODE = getEnvString("DB_JOURNAL_MODE", "DELETE");
+const DB_REFRESH_FROM_BUNDLED = getEnvNumber("DB_REFRESH_FROM_BUNDLED", 0) !== 0;
 const DB_DRIVER_RAW = getEnvString("DB_DRIVER", "");
 const DATABASE_URL = getEnvString("DATABASE_URL", "");
 const PG_CONNECTION_STRING = getEnvString("PG_CONNECTION_STRING", DATABASE_URL);
@@ -37,6 +38,93 @@ function ensureDbFileExists() {
 
 function getBundledSqliteSeedPath() {
   return path.resolve(__dirname, "../data/serums.db");
+}
+
+function refreshSqliteCoreDataFromBundledDb(db) {
+  if (!DB_ENABLED) return { refreshed: false, reason: "disabled" };
+  if (!DB_REFRESH_FROM_BUNDLED) return { refreshed: false, reason: "not_enabled" };
+
+  const seedPath = getBundledSqliteSeedPath();
+  if (!fs.existsSync(seedPath)) return { refreshed: false, reason: "no_seed_file" };
+  if (path.resolve(seedPath) === path.resolve(DB_PATH)) return { refreshed: false, reason: "same_path" };
+
+  const Database = require("better-sqlite3");
+  const seed = new Database(seedPath, { readonly: true });
+  try {
+    const hasSeedTable = (name) => {
+      try {
+        const row = seed
+          .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1")
+          .get(String(name));
+        return !!(row && row.ok);
+      } catch {
+        return false;
+      }
+    };
+
+    if (!hasSeedTable("hospitals") || !hasSeedTable("serums_offers")) {
+      return { refreshed: false, reason: "missing_tables" };
+    }
+
+    const hospitalsColumns = [
+      "id",
+      "profesion",
+      "profesiones_json",
+      "institucion",
+      "departamento",
+      "provincia",
+      "distrito",
+      "grado_dificultad",
+      "codigo_renipress_modular",
+      "nombre_establecimiento",
+      "presupuesto",
+      "categoria",
+      "zaf",
+      "ze",
+      "imagenes_json",
+      "lat",
+      "lng",
+      "coordenadas_fuente",
+      "updated_at",
+    ];
+    const offersColumns = [
+      "hospital_id",
+      "codigo_renipress_modular",
+      "periodo",
+      "modalidad",
+      "profesion",
+      "plazas",
+      "sede_adjudicacion",
+      "created_at",
+      "updated_at",
+    ];
+
+    db.transaction(() => {
+      db.exec("DELETE FROM serums_offers");
+      db.exec("DELETE FROM hospitals");
+
+      const insertHospital = db.prepare(
+        `INSERT INTO hospitals (${hospitalsColumns.join(", ")}) VALUES (${hospitalsColumns.map(() => "?").join(", ")})`,
+      );
+      const insertOffer = db.prepare(
+        `INSERT INTO serums_offers (${offersColumns.join(", ")}) VALUES (${offersColumns.map(() => "?").join(", ")})`,
+      );
+
+      const hospitalsStmt = seed.prepare(`SELECT ${hospitalsColumns.join(", ")} FROM hospitals`);
+      for (const r of hospitalsStmt.iterate()) {
+        insertHospital.run(...hospitalsColumns.map((c) => r[c] ?? null));
+      }
+
+      const offersStmt = seed.prepare(`SELECT ${offersColumns.join(", ")} FROM serums_offers`);
+      for (const r of offersStmt.iterate()) {
+        insertOffer.run(...offersColumns.map((c) => r[c] ?? null));
+      }
+    })();
+
+    return { refreshed: true, reason: "refreshed" };
+  } finally {
+    seed.close();
+  }
 }
 
 async function shouldSeedPostgresFromBundledSqlite(db) {
@@ -273,6 +361,152 @@ async function seedPostgresFromBundledSqlite(pool) {
 
     await client.query("COMMIT");
     return { seeded: true, reason: "seeded" };
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+    sqlite.close();
+  }
+}
+
+async function refreshPostgresCoreDataFromBundledSqlite(pool) {
+  if (!DB_ENABLED) return { refreshed: false, reason: "disabled" };
+  if (!DB_REFRESH_FROM_BUNDLED) return { refreshed: false, reason: "not_enabled" };
+
+  const seedPath = getBundledSqliteSeedPath();
+  if (!fs.existsSync(seedPath)) return { refreshed: false, reason: "no_seed_file" };
+
+  const Database = require("better-sqlite3");
+  const sqlite = new Database(seedPath, { readonly: true });
+
+  const sqliteTableExists = (name) => {
+    try {
+      const row = sqlite
+        .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1")
+        .get(String(name));
+      return !!(row && row.ok);
+    } catch {
+      return false;
+    }
+  };
+
+  if (!sqliteTableExists("hospitals") || !sqliteTableExists("serums_offers")) {
+    sqlite.close();
+    return { refreshed: false, reason: "missing_tables" };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const insertChunk = async ({ table, columns, rows, onConflict }) => {
+      if (!rows || rows.length === 0) return;
+      const colsSql = columns.map((c) => `"${c}"`).join(", ");
+      const values = [];
+      const groups = [];
+      let paramIndex = 1;
+      for (const row of rows) {
+        const placeholders = [];
+        for (const v of row) {
+          values.push(v);
+          placeholders.push(`$${paramIndex++}`);
+        }
+        groups.push(`(${placeholders.join(", ")})`);
+      }
+      const sql = `INSERT INTO ${table} (${colsSql}) VALUES ${groups.join(", ")} ${onConflict}`;
+      await client.query(sql, values);
+    };
+
+    const batchSizeHospitals = 200;
+    const batchSizeOffers = 500;
+
+    const hospitalsColumns = [
+      "id",
+      "profesion",
+      "profesiones_json",
+      "institucion",
+      "departamento",
+      "provincia",
+      "distrito",
+      "grado_dificultad",
+      "codigo_renipress_modular",
+      "nombre_establecimiento",
+      "presupuesto",
+      "categoria",
+      "zaf",
+      "ze",
+      "imagenes_json",
+      "lat",
+      "lng",
+      "coordenadas_fuente",
+      "updated_at",
+    ];
+    const hospitalsOnConflict = `ON CONFLICT ("id") DO UPDATE SET
+      "profesion" = EXCLUDED."profesion",
+      "profesiones_json" = EXCLUDED."profesiones_json",
+      "institucion" = EXCLUDED."institucion",
+      "departamento" = EXCLUDED."departamento",
+      "provincia" = EXCLUDED."provincia",
+      "distrito" = EXCLUDED."distrito",
+      "grado_dificultad" = EXCLUDED."grado_dificultad",
+      "codigo_renipress_modular" = EXCLUDED."codigo_renipress_modular",
+      "nombre_establecimiento" = EXCLUDED."nombre_establecimiento",
+      "presupuesto" = EXCLUDED."presupuesto",
+      "categoria" = EXCLUDED."categoria",
+      "zaf" = EXCLUDED."zaf",
+      "ze" = EXCLUDED."ze",
+      "imagenes_json" = EXCLUDED."imagenes_json",
+      "lat" = EXCLUDED."lat",
+      "lng" = EXCLUDED."lng",
+      "coordenadas_fuente" = EXCLUDED."coordenadas_fuente",
+      "updated_at" = EXCLUDED."updated_at"`;
+
+    const offersColumns = [
+      "hospital_id",
+      "codigo_renipress_modular",
+      "periodo",
+      "modalidad",
+      "profesion",
+      "plazas",
+      "sede_adjudicacion",
+      "created_at",
+      "updated_at",
+    ];
+    const offersOnConflict = `ON CONFLICT ("hospital_id", "periodo", "modalidad", "profesion") DO UPDATE SET
+      "codigo_renipress_modular" = EXCLUDED."codigo_renipress_modular",
+      "plazas" = EXCLUDED."plazas",
+      "sede_adjudicacion" = EXCLUDED."sede_adjudicacion",
+      "updated_at" = EXCLUDED."updated_at"`;
+
+    const hospitalsStmt = sqlite.prepare(`SELECT ${hospitalsColumns.join(", ")} FROM hospitals`);
+    let hospitalsBatch = [];
+    for (const r of hospitalsStmt.iterate()) {
+      hospitalsBatch.push(hospitalsColumns.map((c) => r[c] ?? null));
+      if (hospitalsBatch.length >= batchSizeHospitals) {
+        await insertChunk({ table: "hospitals", columns: hospitalsColumns, rows: hospitalsBatch, onConflict: hospitalsOnConflict });
+        hospitalsBatch = [];
+      }
+    }
+    if (hospitalsBatch.length) {
+      await insertChunk({ table: "hospitals", columns: hospitalsColumns, rows: hospitalsBatch, onConflict: hospitalsOnConflict });
+    }
+
+    const offersStmt = sqlite.prepare(`SELECT ${offersColumns.join(", ")} FROM serums_offers`);
+    let offersBatch = [];
+    for (const r of offersStmt.iterate()) {
+      offersBatch.push(offersColumns.map((c) => r[c] ?? null));
+      if (offersBatch.length >= batchSizeOffers) {
+        await insertChunk({ table: "serums_offers", columns: offersColumns, rows: offersBatch, onConflict: offersOnConflict });
+        offersBatch = [];
+      }
+    }
+    if (offersBatch.length) {
+      await insertChunk({ table: "serums_offers", columns: offersColumns, rows: offersBatch, onConflict: offersOnConflict });
+    }
+
+    await client.query("COMMIT");
+    return { refreshed: true, reason: "refreshed" };
   } catch (e) {
     await client.query("ROLLBACK");
     throw e;
@@ -551,6 +785,11 @@ async function ensureSchemaReady() {
         process.stdout.write(`DB seed: ${result && result.seeded ? "OK" : "SKIP"}\n`);
       }
 
+      const refreshResult = await refreshPostgresCoreDataFromBundledSqlite(db);
+      if (refreshResult && refreshResult.refreshed) {
+        process.stdout.write("DB refresh: Postgres actualizado desde src/data/serums.db\n");
+      }
+
       const bootstrapPassword = getEnvString("ADMIN_PASSWORD", "").trim();
       if (bootstrapPassword) {
         const adminEmail = String(getEnvString("ADMIN_EMAIL", "admin@localisa.com") || "").trim().toLowerCase();
@@ -641,6 +880,11 @@ function getDb() {
     const seedPath = path.resolve(__dirname, "../data/serums.db");
     fs.copyFileSync(seedPath, DB_PATH);
     db = open();
+  }
+
+  const refreshResult = refreshSqliteCoreDataFromBundledDb(db);
+  if (refreshResult && refreshResult.refreshed) {
+    process.stdout.write("DB refresh: SQLite actualizado desde src/data/serums.db\n");
   }
 
   dbInstance = db;
