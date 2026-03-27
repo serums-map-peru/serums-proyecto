@@ -9,6 +9,8 @@
     "start": "node server.js",
     "import:db": "node src/scripts/importHospitalsToDb.js",
     "import:offers": "node src/scripts/importSerumsOffersToDb.js",
+    "import:lisa": "node src/scripts/importLisaCsvToDb.js",
+    "geocode:db": "node src/scripts/geocodeHospitalsInDb.js",
     "seed:pg": "npm run import:db && npm run import:offers"
   },
   "dependencies": {

@@ -956,7 +956,7 @@ export function HospitalDetailPanel({
                           ))}
                         </div>
                       ) : nearby ? (
-                        <div className="mt-3 text-xs font-medium text-[var(--label)]">Sin resultados con los filtros actuales.</div>
+                        <div className="mt-3 text-xs font-medium text-[var(--label)]">No hay establecimientos en un radio de {nearbyFilters.radiusKm} km para los tipos seleccionados.</div>
                       ) : (
                         <div className="mt-3 text-xs font-medium text-[var(--label)]">Selecciona Buscar para ver resultados.</div>
                       )}
@@ -1143,6 +1143,9 @@ export function HospitalDetailPanel({
                               <div className="mt-1 text-xs font-medium text-[var(--label)]">
                                 Aeropuerto → establecimiento: {formatDistance(nearestAirportDistanceMeters)}
                               </div>
+                            ) : null}
+                            {!nearestAirport && !airportLoading && !airportError ? (
+                              <div className="mt-2 text-xs font-medium text-[var(--label)]">No encontramos un aeropuerto a menos de 250 km.</div>
                             ) : null}
                           </div>
                         </div>

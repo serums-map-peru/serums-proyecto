@@ -22,6 +22,9 @@ export function createInitialHospitalFilters(): HospitalFilters {
 function getApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (configured && configured.trim().length > 0) return configured.trim().replace(/\/$/, "");
+  if (typeof window !== "undefined" && window.location && window.location.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:4000/api`;
+  }
   return "http://localhost:4000/api";
 }
 

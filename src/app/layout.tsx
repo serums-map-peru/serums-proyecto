@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   description:
     "Mapa interactivo para visualizar establecimientos donde realizar el SERUMS en Perú.",
   icons: {
-    icon: "/LISApersonaje.png",
+    icon: "serums-map-peru\public\LISApersonaje.png",
   },
   openGraph: {
     title: "LISA",

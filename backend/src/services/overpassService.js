@@ -4,6 +4,10 @@ const { getEnvNumber } = require("../utils/env");
 const OVERPASS_TIMEOUT_MS = getEnvNumber("OVERPASS_TIMEOUT_MS", 18_000);
 const NEARBY_CACHE_TTL_MS = getEnvNumber("NEARBY_CACHE_TTL_MS", 15 * 60_000);
 const NEARBY_CACHE_MAX = getEnvNumber("NEARBY_CACHE_MAX", 800);
+const OVERPASS_ENDPOINTS = (process.env.OVERPASS_ENDPOINTS || "https://overpass-api.de/api/interpreter,https://overpass.kumi.systems/api/interpreter")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const nearbyCache = new Map();
 
@@ -120,32 +124,41 @@ async function getNearbyPlaces({ lat, lon, radius = 2000, types = null }) {
   );
 
   const lines = [];
-  if (wanted.has("hospedajes")) lines.push(`  node(around:${radius},${latN},${lonN})["tourism"="hotel"];`);
-  if (wanted.has("restaurantes")) lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="restaurant"];`);
-  if (wanted.has("farmacias")) lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="pharmacy"];`);
-  if (wanted.has("comisarias")) lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="police"];`);
+  if (wanted.has("hospedajes")) {
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["tourism"="hotel"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["tourism"="guest_house"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["tourism"="hostel"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["tourism"="motel"];`);
+  }
+  if (wanted.has("restaurantes")) {
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="restaurant"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="fast_food"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="cafe"];`);
+  }
+  if (wanted.has("farmacias")) lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="pharmacy"];`);
+  if (wanted.has("comisarias")) lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="police"];`);
   if (wanted.has("bancos")) {
-    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="bank"];`);
-    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="atm"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="bank"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="atm"];`);
   }
   if (wanted.has("gimnasios")) {
-    lines.push(`  node(around:${radius},${latN},${lonN})["leisure"="fitness_centre"];`);
-    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="fitness_centre"];`);
-    lines.push(`  node(around:${radius},${latN},${lonN})["leisure"="sports_centre"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["leisure"="fitness_centre"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="fitness_centre"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["leisure"="sports_centre"];`);
   }
   if (wanted.has("iglesias")) {
-    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="place_of_worship"];`);
-    lines.push(`  node(around:${radius},${latN},${lonN})["building"="church"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="place_of_worship"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["building"="church"];`);
   }
   if (wanted.has("centros_comerciales")) {
-    lines.push(`  node(around:${radius},${latN},${lonN})["shop"="mall"];`);
-    lines.push(`  node(around:${radius},${latN},${lonN})["amenity"="marketplace"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["shop"="mall"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["amenity"="marketplace"];`);
   }
-  if (wanted.has("supermercados")) lines.push(`  node(around:${radius},${latN},${lonN})["shop"="supermarket"];`);
+  if (wanted.has("supermercados")) lines.push(`  nwr(around:${radius},${latN},${lonN})["shop"="supermarket"];`);
   if (wanted.has("tiendas")) {
-    lines.push(`  node(around:${radius},${latN},${lonN})["shop"="convenience"];`);
-    lines.push(`  node(around:${radius},${latN},${lonN})["shop"="general"];`);
-    lines.push(`  node(around:${radius},${latN},${lonN})["shop"="kiosk"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["shop"="convenience"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["shop"="general"];`);
+    lines.push(`  nwr(around:${radius},${latN},${lonN})["shop"="kiosk"];`);
   }
 
   if (!lines.length) {
@@ -162,16 +175,20 @@ out center;`;
   const timeoutId = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
   let res;
   try {
-    res = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
-        accept: "application/json",
-        "user-agent": "SERUMS-Map-Peru/1.0",
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: controller.signal,
-    });
+    const endpoints = OVERPASS_ENDPOINTS.length ? OVERPASS_ENDPOINTS : ["https://overpass-api.de/api/interpreter"];
+    for (const ep of endpoints) {
+      res = await fetch(ep, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+          accept: "application/json",
+          "user-agent": "SERUMS-Map-Peru/1.0",
+        },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
+      });
+      if (res.ok) break;
+    }
   } catch (err) {
     if (err && typeof err === "object" && "name" in err && err.name === "AbortError") {
       throw new HttpError(504, "Servicio de lugares cercanos (Overpass) lento o no disponible. Reintenta.", {
@@ -214,7 +231,9 @@ out center;`;
   for (const el of elements) {
     const key = groupKeyForElement(el);
     if (!key) continue;
-    grouped[key].push(mapElement(el));
+    const mapped = mapElementWithCenter(el);
+    if (!mapped) continue;
+    grouped[key].push(mapped);
   }
 
   writeCache(cacheKey, grouped);

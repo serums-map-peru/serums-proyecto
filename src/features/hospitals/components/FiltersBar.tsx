@@ -90,9 +90,12 @@ function AppleCheckbox({
       </div>
       <div
         className={cn(
-          "grid h-5 w-5 place-items-center rounded-full border-2 transition-[background-color,border-color] duration-200 ease-out",
-          checked ? "border-[var(--primary)] bg-[var(--primary)]" : "border-border bg-[var(--card)]",
+          "grid h-5 w-5 place-items-center rounded-full border-2 transition-[background-color,border-color] duration-200 ease-out"
         )}
+        style={{
+          borderColor: checked ? "var(--primary)" : "var(--border)",
+          backgroundColor: checked ? "var(--primary)" : "var(--card)",
+        }}
         aria-hidden="true"
       >
         <svg viewBox="0 0 24 24" className={cn("h-4 w-4", checked ? "block" : "hidden")} fill="none">

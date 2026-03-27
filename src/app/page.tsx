@@ -1134,7 +1134,7 @@ export default function HomePage() {
       const timeoutId = setTimeout(() => controller.abort(), 20_000);
       let r;
       try {
-        r = await fetch(`${apiBase}/hospitales/${encodeURIComponent(selectedHospital.id)}/geocodificar`, {
+        r = await fetch(`${apiBase}/hospitales/${encodeURIComponent(selectedHospital.id)}/geocodificar?force=1`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,

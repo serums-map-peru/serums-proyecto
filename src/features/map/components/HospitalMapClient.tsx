@@ -65,16 +65,6 @@ function institucionGroupColor(institucion: string) {
   return "#EF4444";
 }
 
-function gdColor(gd: string) {
-  const normalized = (gd || "").toUpperCase();
-  if (normalized.includes("GD-1")) return "#22C55E";
-  if (normalized.includes("GD-2")) return "#84CC16";
-  if (normalized.includes("GD-3")) return "#FBBF24";
-  if (normalized.includes("GD-4")) return "#F97316";
-  if (normalized.includes("GD-5")) return "#EF4444";
-  return "#94A3B8";
-}
-
 function categoriaNumber(categoria: string) {
   const m = /^I-(\d)$/.exec((categoria || "").trim().toUpperCase());
   return m ? m[1] : "";
@@ -141,7 +131,6 @@ function toTitleCase(value: string) {
 function createMedicalPinDivIcon({
   institucion,
   categoria,
-  gd,
   label,
   size,
   selected,
@@ -149,14 +138,12 @@ function createMedicalPinDivIcon({
 }: {
   institucion: string;
   categoria: string;
-  gd: string;
   label: string;
   size: number;
   selected: boolean;
   showLabel: boolean;
 }) {
   const fill = institucionGroupColor(institucion);
-  const dot = gdColor(gd);
   const cat = categoriaNumber(categoria);
   const safeLabel = escapeHtml(label || "");
 
@@ -200,16 +187,6 @@ function createMedicalPinDivIcon({
               ">${cat}</div>`
             : ""
         }
-        <div style="
-          position:absolute;
-          left:-4px;
-          bottom:8px;
-          width:10px;
-          height:10px;
-          border-radius:9999px;
-          background:${dot};
-          border:2px solid rgba(255,255,255,0.95);
-        "></div>
       </div>
       ${
         showLabel
@@ -368,13 +345,6 @@ function ClusteredHospitalsLayer({
   }, [hospitals]);
 
   React.useEffect(() => {
-    const clusterScaleColor = (count: number) => {
-      if (count <= 10) return "#22C55E";
-      if (count <= 50) return "#FBBF24";
-      if (count <= 200) return "#FB923C";
-      return "#EF4444";
-    };
-
     const cluster = L.markerClusterGroup({
       chunkedLoading: true,
       chunkDelay: 30,
@@ -383,13 +353,15 @@ function ClusteredHospitalsLayer({
       animate: true,
       removeOutsideVisibleBounds: true,
       showCoverageOnHover: false,
-      spiderfyOnMaxZoom: false,
-      maxClusterRadius: 52,
+      zoomToBoundsOnClick: true,
+      spiderfyOnMaxZoom: true,
+      spiderfyDistanceMultiplier: 1.25,
+      disableClusteringAtZoom: 14,
+      maxClusterRadius: (zoom) => (zoom >= 12 ? 38 : zoom >= 9 ? 46 : 52),
       iconCreateFunction: (c) => {
         const count = c.getChildCount();
         const size = count < 10 ? 36 : count < 100 ? 40 : 44;
-        const bg = clusterScaleColor(count);
-        const html = `<div class="serums-cluster" style="width:${size}px;height:${size}px;background:${bg};"><div style="font-size:13px;line-height:1">${count}</div></div>`;
+        const html = `<div class="serums-cluster" style="width:${size}px;height:${size}px;background:#F3F4F6;border:1px solid rgba(0,0,0,0.10);color:rgba(17,24,39,0.95);"><div style="font-size:13px;line-height:1">${count}</div></div>`;
         return L.divIcon({
           className: "",
           html,
@@ -424,7 +396,6 @@ function ClusteredHospitalsLayer({
       return createMedicalPinDivIcon({
         institucion: h.institucion,
         categoria: h.categoria,
-        gd: h.grado_dificultad,
         label: toTitleCase(h.nombre_establecimiento),
         size,
         selected,
@@ -438,8 +409,7 @@ function ClusteredHospitalsLayer({
     const profesion = (Array.isArray(h.profesiones) && h.profesiones.length > 0 ? h.profesiones.join(" · ") : h.profesion) || "—";
     const catRaw = String(h.categoria || "").trim();
     const categoria = catRaw && catRaw !== "0" ? catRaw : "";
-    const gd = h.grado_dificultad || "—";
-    const meta = [profesion, categoria, gd].filter((x) => String(x || "").trim() !== "").join(" · ");
+    const meta = [profesion, categoria].filter((x) => String(x || "").trim() !== "").join(" · ");
     return `
       <div style="display:grid;gap:4px;min-width:180px">
         <div style="font-weight:650;font-size:14px;color:rgba(29,29,31,0.92)">${escapeHtml(toTitleCase(h.nombre_establecimiento) || "—")}</div>
@@ -565,7 +535,48 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
 
   const placeMarkersRef = React.useRef<Map<string, L.Marker>>(new Map());
 
-  const MapEffects = () => {
+  const InvalidateSizeController = () => {
+    const map = useMap();
+
+    React.useEffect(() => {
+      const container = map.getContainer();
+      let raf = 0;
+
+      const invalidate = () => {
+        if (raf) window.cancelAnimationFrame(raf);
+        raf = window.requestAnimationFrame(() => map.invalidateSize());
+      };
+
+      invalidate();
+
+      const t1 = window.setTimeout(invalidate, 0);
+      const t2 = window.setTimeout(invalidate, 300);
+      const t3 = window.setTimeout(invalidate, 900);
+
+      let ro: ResizeObserver | null = null;
+      if (typeof ResizeObserver !== "undefined") {
+        ro = new ResizeObserver(() => invalidate());
+        ro.observe(container);
+      }
+
+      window.addEventListener("resize", invalidate);
+      window.addEventListener("orientationchange", invalidate);
+
+      return () => {
+        window.clearTimeout(t1);
+        window.clearTimeout(t2);
+        window.clearTimeout(t3);
+        if (ro) ro.disconnect();
+        window.removeEventListener("resize", invalidate);
+        window.removeEventListener("orientationchange", invalidate);
+        if (raf) window.cancelAnimationFrame(raf);
+      };
+    }, [map]);
+
+    return null;
+  };
+
+  const MapEffects = ({ focusNearbyId }: { focusNearbyId: string | null }) => {
     const map = useMap();
     React.useEffect(() => {
       if (!focusNearbyId) return;
@@ -601,8 +612,12 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="/api/tiles/{z}/{x}/{y}"
+          updateWhenZooming={false}
+          updateWhenIdle
+          keepBuffer={3}
         />
 
+        <InvalidateSizeController />
         <FocusController focus={focus} />
         <RouteFitController routeLatLngs={routeLatLngs} />
 
@@ -673,7 +688,7 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
               ))
             : null}
 
-        <MapEffects />
+        <MapEffects focusNearbyId={focusNearbyId} />
       </MapContainer>
     </div>
   );

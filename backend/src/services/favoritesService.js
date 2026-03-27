@@ -28,6 +28,9 @@ async function addFavorite({ userId, item_type, item_id, name = null, lat = null
   if (!id) throw new HttpError(400, "ID de favorito requerido");
 
   if (t === "hospital") {
+    const incomingMeta = meta && typeof meta === "object" ? meta : null;
+    const existing = incomingMeta == null ? await favoritesRepository.getFavorite({ userId, item_type: t, item_id: id }) : null;
+    const metaToStore = incomingMeta != null ? incomingMeta : existing && existing.meta && typeof existing.meta === "object" ? existing.meta : null;
     const hospital = await getHospitalById(id);
     const n = hospital && hospital.nombre_establecimiento ? String(hospital.nombre_establecimiento) : null;
     const hLat = hospital && Number.isFinite(hospital.lat) ? Number(hospital.lat) : null;
@@ -39,7 +42,7 @@ async function addFavorite({ userId, item_type, item_id, name = null, lat = null
       name: n,
       lat: hLat,
       lon: hLng,
-      meta: null,
+      meta: metaToStore,
     });
   }
 

@@ -3,7 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { HttpError } = require("../utils/httpError");
 const { getEnvNumber, getEnvString } = require("../utils/env");
-const { DB_ENABLED, DB_PATH } = require("../db");
+const { DB_ENABLED, DB_PATH, queryOne } = require("../db");
 const hospitalRepository = require("../db/hospitalRepository");
 const serumsOfferRepository = require("../db/serumsOfferRepository");
 const { searchPlacesPe } = require("./nominatimService");
@@ -255,7 +255,7 @@ function isReasonableForDepartment(coords, deptCenter) {
   if (!coords) return false;
   if (!deptCenter) return true;
   const km = haversineKm(coords, deptCenter);
-  return km <= 900;
+  return km <= 400;
 }
 
 const GEOCODE_ENABLED = getEnvNumber("GEOCODE_ENABLED", 1) !== 0;
@@ -412,6 +412,7 @@ function bestNominatimMatch(results, hospital, deptCenter) {
   const items = Array.isArray(results) ? results : [];
   if (items.length === 0) return null;
 
+  const nameTokens = tokenize(hospital.nombre_establecimiento || "");
   const distTokens = tokenize(hospital.distrito);
   const provTokens = tokenize(hospital.provincia);
   const depTokens = tokenize(hospital.departamento);
@@ -431,9 +432,10 @@ function bestNominatimMatch(results, hospital, deptCenter) {
         (includesAllTokens(display, depTokens) ? 6 : 0) +
         (includesAllTokens(display, provTokens) ? 4 : 0) +
         (includesAllTokens(display, distTokens) ? 3 : 0) +
+        (includesAllTokens(display, nameTokens) ? 7 : 0) +
         (typeof it.importance === "number" ? it.importance : 0);
 
-      const distancePenalty = deptCenter ? haversineKm(candidate, deptCenter) / 300 : 0;
+      const distancePenalty = deptCenter ? haversineKm(candidate, deptCenter) / 120 : 0;
       return { lat: candidate.lat, lng: candidate.lng, score: score - distancePenalty };
     })
     .filter(Boolean);
@@ -446,9 +448,12 @@ function bestNominatimMatch(results, hospital, deptCenter) {
   return { lat: best.lat, lng: best.lng };
 }
 
-async function geocodeHospitalRecord(hospital) {
+async function geocodeHospitalRecord(hospital, { force = false } = {}) {
   if (!GEOCODE_ENABLED) return null;
   if (!hospital || !hospital.id) return null;
+
+  const source = cleanString(hospital.coordenadas_fuente).toUpperCase();
+  if (!force && source === "CSV" && isWithinPeruBBox(hospital.lat, hospital.lng)) return null;
 
   const deptCenter = getCoordsForDepartment(hospital.departamento);
 
@@ -717,7 +722,18 @@ function loadRenipressIndex() {
 let cached = null;
 let dbHospitalsCache = null;
 let dbHospitalsRevision = 0;
+let dbHospitalsDataVersion = null;
 let dbSeedPromise = null;
+
+async function readDbDataVersion() {
+  try {
+    const row = await queryOne("PRAGMA data_version");
+    const v = row && row.data_version != null ? Number(row.data_version) : null;
+    return Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 async function loadHospitalsFromCsv() {
   const csvPath = getCsvPath();
@@ -1031,11 +1047,15 @@ async function ensureDbSeeded() {
 }
 
 async function loadHospitalsFromDb() {
-  if (dbHospitalsCache && dbHospitalsCache.revision === dbHospitalsRevision) return dbHospitalsCache;
+  const dv = await readDbDataVersion();
+  if (dbHospitalsCache && dbHospitalsCache.revision === dbHospitalsRevision) {
+    if (dv == null || (dbHospitalsDataVersion != null && dv === dbHospitalsDataVersion)) return dbHospitalsCache;
+  }
   const records = await hospitalRepository.listHospitalsWithOverrides();
   const byId = new Map();
   for (const h of records) byId.set(String(h.id), h);
   dbHospitalsCache = { revision: dbHospitalsRevision, records, byId };
+  dbHospitalsDataVersion = dv;
   return dbHospitalsCache;
 }
 
@@ -1222,11 +1242,11 @@ async function getHospitalById(id) {
   return { ...hospital, serums_ofertas: offers, serums_resumen: resumen };
 }
 
-async function geocodeHospitalById(id) {
+async function geocodeHospitalById(id, { force = false } = {}) {
   if (DB_ENABLED) await ensureDbSeeded();
   const hospital = await getHospitalById(id);
   try {
-    await geocodeHospitalRecord(hospital);
+    await geocodeHospitalRecord(hospital, { force });
   } catch {
   }
   if (DB_ENABLED) return await getHospitalById(id);
