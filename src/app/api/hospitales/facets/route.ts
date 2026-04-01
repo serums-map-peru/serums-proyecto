@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -82,7 +82,7 @@ function buildHospitalsWhere({
   omit: "departamento" | "institucion" | "grado_dificultad" | "categoria" | null;
 }) {
   const where: string[] = [];
-  const params: string[] = [];
+  const params: SQLInputValue[] = [];
 
   where.push("CAST(h.lat AS REAL) BETWEEN -90 AND 90");
   where.push("CAST(h.lng AS REAL) BETWEEN -180 AND 180");
@@ -165,6 +165,19 @@ function queryEnabledSet(db: DatabaseSync, column: string, whereSql: string, par
 }
 
 export async function GET(request: Request) {
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL ? String(process.env.NEXT_PUBLIC_API_BASE_URL).trim().replace(/\/$/, "") : "";
+  const selfBase = `${new URL(request.url).origin}/api`;
+  if (configured && configured !== selfBase) {
+    const url = new URL(request.url);
+    const upstream = `${configured}/hospitales/facets?${url.searchParams.toString()}`;
+    const res = await fetch(upstream, { headers: { accept: "application/json" } }).catch(() => null);
+    if (!res) {
+      return NextResponse.json({ error: { message: "No se pudo conectar al backend.", status: 502 } }, { status: 502 });
+    }
+    const body = await res.json().catch(() => null);
+    return NextResponse.json(body, { status: res.status });
+  }
+
   const db = openDb();
   if (!db) {
     return NextResponse.json(

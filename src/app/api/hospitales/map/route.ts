@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -216,6 +216,19 @@ async function filterByAirportHoursMax(rows: HospitalRow[], airportHoursMax: num
 }
 
 export async function GET(request: Request) {
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL ? String(process.env.NEXT_PUBLIC_API_BASE_URL).trim().replace(/\/$/, "") : "";
+  const selfBase = `${new URL(request.url).origin}/api`;
+  if (configured && configured !== selfBase) {
+    const url = new URL(request.url);
+    const upstream = `${configured}/hospitales/map?${url.searchParams.toString()}`;
+    const res = await fetch(upstream, { headers: { accept: "application/json" } }).catch(() => null);
+    if (!res) {
+      return NextResponse.json({ error: { message: "No se pudo conectar al backend.", status: 502 } }, { status: 502 });
+    }
+    const body = await res.json().catch(() => null);
+    return NextResponse.json(body, { status: res.status });
+  }
+
   const db = openDb();
   if (!db) {
     return NextResponse.json(
@@ -247,7 +260,7 @@ export async function GET(request: Request) {
     const joinSql = hasOverrides ? "LEFT JOIN hospital_coord_overrides o ON o.hospital_id = h.id" : "";
 
     const where: string[] = [];
-    const params: unknown[] = [];
+    const params: SQLInputValue[] = [];
 
     where.push(`CAST(${latSql} AS REAL) BETWEEN -90 AND 90`);
     where.push(`CAST(${lngSql} AS REAL) BETWEEN -180 AND 180`);
@@ -282,7 +295,7 @@ export async function GET(request: Request) {
       if (!tableExists(db, "serums_offers")) return NextResponse.json([], { status: 200 });
 
       const offerWhere: string[] = ["o.hospital_id = h.id"];
-      const offerParams: unknown[] = [];
+      const offerParams: SQLInputValue[] = [];
       if (serums_periodo) {
         offerWhere.push("LOWER(o.periodo) = ?");
         offerParams.push(serums_periodo.toLowerCase());
