@@ -148,7 +148,7 @@ function queryDistinctValues(db: DatabaseSync, column: string) {
   return rows.map((r) => r.v);
 }
 
-function queryEnabledSet(db: DatabaseSync, column: string, whereSql: string, params: string[]) {
+function queryEnabledSet(db: DatabaseSync, column: string, whereSql: string, params: SQLInputValue[]) {
   const sql = `
     SELECT DISTINCT ${column} AS v
     FROM hospitals h
@@ -234,7 +234,7 @@ export async function GET(request: Request) {
         }
 
         const offerWhere: string[] = ["o.hospital_id = h.id"];
-        const offerParams: string[] = [];
+        const offerParams: SQLInputValue[] = [];
         if (serums_periodo) {
           offerWhere.push("LOWER(o.periodo) = ?");
           offerParams.push(serums_periodo.toLowerCase());
