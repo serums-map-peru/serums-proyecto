@@ -11,7 +11,8 @@
     "import:offers": "node src/scripts/importSerumsOffersToDb.js",
     "import:lisa": "node src/scripts/importLisaCsvToDb.js",
     "geocode:db": "node src/scripts/geocodeHospitalsInDb.js",
-    "seed:pg": "npm run import:db && npm run import:offers"
+    "seed:pg": "npm run import:db && npm run import:offers",
+    "pg:push-sqlite": "node src/scripts/pushSqliteToPg.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
