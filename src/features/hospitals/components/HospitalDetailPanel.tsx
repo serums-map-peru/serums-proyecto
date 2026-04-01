@@ -518,10 +518,13 @@ export function HospitalDetailPanel({
         .then(async (r) => {
           const body = await r.json().catch(() => null);
           if (Array.isArray(body)) return { results: body as NominatimResult[], warning: null as string | null };
-          if (body && typeof body === "object" && "results" in body && Array.isArray((body as any).results)) {
-            const warning =
-              "warning" in body && typeof (body as any).warning === "string" ? String((body as any).warning) : null;
-            return { results: (body as any).results as NominatimResult[], warning };
+          if (body && typeof body === "object") {
+            const obj = body as Record<string, unknown>;
+            const resultsRaw = obj["results"];
+            if (Array.isArray(resultsRaw)) {
+              const warning = typeof obj["warning"] === "string" ? String(obj["warning"]) : null;
+              return { results: resultsRaw as NominatimResult[], warning };
+            }
           }
           if (!r.ok) throw new Error("Error al buscar. Buscar de nuevo.");
           return { results: [] as NominatimResult[], warning: null as string | null };

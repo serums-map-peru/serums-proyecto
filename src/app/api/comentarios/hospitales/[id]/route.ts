@@ -36,7 +36,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   if (!hospitalId) return NextResponse.json({ error: { message: "ID inválido", status: 400 } }, { status: 400 });
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  const comment = cleanComment(body ? (body as any).comment : "");
+  const commentRaw = body && typeof body === "object" ? body["comment"] : "";
+  const comment = cleanComment(commentRaw);
 
   const db = openDb();
   if (!db) return NextResponse.json({ error: { message: "Base de datos no encontrada.", status: 500 } }, { status: 500 });
@@ -59,4 +60,3 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
   return NextResponse.json({ comment, updated_at: now }, { status: 200 });
 }
-

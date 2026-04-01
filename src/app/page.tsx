@@ -460,8 +460,8 @@ export default function HomePage() {
         const body = await r.json().catch(() => null);
         if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo cargar el comentario."));
         const comment =
-          body && typeof body === "object" && "comment" in body && typeof (body as any).comment === "string"
-            ? String((body as any).comment)
+          body && typeof body === "object" && typeof (body as Record<string, unknown>)["comment"] === "string"
+            ? String((body as Record<string, unknown>)["comment"])
             : "";
         setCommentDraftByHospitalId((prev) => {
           if (prev[hospitalId] != null) return prev;
@@ -505,8 +505,8 @@ export default function HomePage() {
         const body = await r.json().catch(() => null);
         if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo guardar el comentario."));
         const comment =
-          body && typeof body === "object" && "comment" in body && typeof (body as any).comment === "string"
-            ? String((body as any).comment)
+          body && typeof body === "object" && typeof (body as Record<string, unknown>)["comment"] === "string"
+            ? String((body as Record<string, unknown>)["comment"])
             : "";
         setCommentDraftByHospitalId((p) => ({ ...p, [hospitalId]: comment }));
       } catch (e) {
@@ -788,10 +788,13 @@ export default function HomePage() {
         .then(async (r) => {
           const body = await r.json().catch(() => null);
           if (Array.isArray(body)) return { results: body as NominatimResult[], warning: null as string | null };
-          if (body && typeof body === "object" && "results" in body && Array.isArray((body as any).results)) {
-            const warning =
-              "warning" in body && typeof (body as any).warning === "string" ? String((body as any).warning) : null;
-            return { results: (body as any).results as NominatimResult[], warning };
+          if (body && typeof body === "object") {
+            const obj = body as Record<string, unknown>;
+            const resultsRaw = obj["results"];
+            if (Array.isArray(resultsRaw)) {
+              const warning = typeof obj["warning"] === "string" ? String(obj["warning"]) : null;
+              return { results: resultsRaw as NominatimResult[], warning };
+            }
           }
           if (!r.ok) throw new Error("Error al buscar. Buscar de nuevo.");
           return { results: [] as NominatimResult[], warning: null as string | null };
@@ -952,31 +955,26 @@ export default function HomePage() {
       try {
         const r = await fetch(`${apiBase}/ruta?${qs}`, { signal: controller.signal });
         const body = await r.json().catch(() => null);
+        const obj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+        const geometria = obj && typeof obj["geometria"] === "object" ? (obj["geometria"] as Record<string, unknown>) : null;
         const isValid =
-          body &&
-          typeof body === "object" &&
-          typeof (body as any).distancia === "number" &&
-          typeof (body as any).duracion === "number" &&
-          (body as any).geometria &&
-          typeof (body as any).geometria === "object" &&
-          (body as any).geometria.type === "LineString" &&
-          Array.isArray((body as any).geometria.coordinates);
+          !!obj &&
+          typeof obj["distancia"] === "number" &&
+          typeof obj["duracion"] === "number" &&
+          !!geometria &&
+          geometria["type"] === "LineString" &&
+          Array.isArray(geometria["coordinates"]);
 
-        if (r.ok && isValid) {
+        const isApprox = !!(obj && obj["aproximada"] === true);
+        if (r.ok && isValid && !isApprox) {
           setRoute(body as RouteResponse);
         } else {
-          const fallbackDist = haversineMeters(
-            { lat: origin.lat, lng: origin.lng },
-            { lat: selectedHospital.lat, lng: selectedHospital.lng },
-          );
-          const fallback: RouteResponse = {
-            distancia: fallbackDist,
-            duracion: fallbackDist / 13.9,
-            geometria: { type: "LineString", coordinates: [[origin.lng, origin.lat], [selectedHospital.lng, selectedHospital.lat]] },
-            aproximada: true,
-            warning: "No se pudo calcular ruta exacta. Mostrando ruta aproximada.",
-          };
-          setRoute(fallback);
+          const warning =
+            obj && typeof obj["warning"] === "string"
+              ? String(obj["warning"])
+              : "Ruta por carretera no disponible. Usa Google Maps.";
+          setRoute(null);
+          setRouteError(approxWarning ? `${approxWarning} ${warning}` : warning);
         }
       } finally {
         clearTimeout(timeoutId);
@@ -998,27 +996,7 @@ export default function HomePage() {
         e && typeof e === "object" && "name" in e && e.name === "AbortError"
           ? "Servicio de rutas lento o no disponible. Mostrando ruta aproximada."
           : geolocationErrorMessage(e);
-      try {
-        const origin =
-          routeOrigin.type === "user"
-            ? userLocation
-            : { lat: routeOrigin.lat, lng: routeOrigin.lng, accuracy: null };
-        if (origin && Number.isFinite(origin.lat) && Number.isFinite(origin.lng)) {
-          const dist = haversineMeters(
-            { lat: origin.lat, lng: origin.lng },
-            { lat: selectedHospital.lat, lng: selectedHospital.lng },
-          );
-          const fallback: RouteResponse = {
-            distancia: dist,
-            duracion: dist / 13.9,
-            geometria: { type: "LineString", coordinates: [[origin.lng, origin.lat], [selectedHospital.lng, selectedHospital.lat]] },
-            aproximada: true,
-            warning: msg,
-          };
-          setRoute(fallback);
-        }
-      } catch {
-      }
+      setRoute(null);
       setRouteError(approxWarning ? `${approxWarning} ${msg}` : msg);
     } finally {
       setRouteLoading(false);

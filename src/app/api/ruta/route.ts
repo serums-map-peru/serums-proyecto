@@ -101,9 +101,15 @@ async function fetchOsrmRoute(
       const url = `${root}/nearest/v1/${profile}/${lon},${lat}?number=1`;
       const res = await fetch(url, { headers: { accept: "application/json" }, signal: controller.signal }).catch(() => null);
       if (!res || !res.ok) return null;
-      const body = (await res.json().catch(() => null)) as any;
-      const wp = body && Array.isArray(body.waypoints) && body.waypoints[0] ? body.waypoints[0] : null;
-      const loc = wp && Array.isArray(wp.location) ? wp.location : null;
+      const body = (await res.json().catch(() => null)) as unknown;
+      const obj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+      const waypoints = obj && Array.isArray(obj["waypoints"]) ? (obj["waypoints"] as unknown[]) : null;
+      const wp = waypoints && waypoints[0] && typeof waypoints[0] === "object" ? (waypoints[0] as Record<string, unknown>) : null;
+      const locRaw = wp && Array.isArray(wp["location"]) ? (wp["location"] as unknown[]) : null;
+      const loc =
+        locRaw && locRaw.length === 2 && Number.isFinite(Number(locRaw[0])) && Number.isFinite(Number(locRaw[1]))
+          ? [Number(locRaw[0]), Number(locRaw[1])]
+          : null;
       if (!loc || loc.length !== 2) return null;
       const snappedLon = Number(loc[0]);
       const snappedLat = Number(loc[1]);
@@ -199,16 +205,18 @@ async function fetchValhallaRoute(profile: string, latU: number, lonU: number, l
         return null;
       }
 
-      const body = (await res.json().catch(() => null)) as any;
-      const routes = body && Array.isArray(body.routes) ? body.routes : null;
-      const first = routes && routes[0] ? routes[0] : null;
-      const geom = first && first.geometry ? first.geometry : null;
-      if (!first || !geom || geom.type !== "LineString" || !Array.isArray(geom.coordinates)) return null;
+      const body = (await res.json().catch(() => null)) as unknown;
+      const obj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+      const routes = obj && Array.isArray(obj["routes"]) ? (obj["routes"] as unknown[]) : null;
+      const first = routes && routes[0] && typeof routes[0] === "object" ? (routes[0] as Record<string, unknown>) : null;
+      const geom = first && typeof first["geometry"] === "object" ? (first["geometry"] as Record<string, unknown>) : null;
+      const coords = geom && Array.isArray(geom["coordinates"]) ? (geom["coordinates"] as unknown[]) : null;
+      if (!first || !geom || geom["type"] !== "LineString" || !coords) return null;
 
       return {
-        distancia: first.distance,
-        duracion: first.duration,
-        geometria: geom,
+        distancia: typeof first["distance"] === "number" ? first["distance"] : NaN,
+        duracion: typeof first["duration"] === "number" ? first["duration"] : NaN,
+        geometria: { type: "LineString" as const, coordinates: coords as Array<[number, number]> },
         aproximada: false,
         warning: "Ruta generada con proveedor alternativo.",
       };
@@ -254,13 +262,14 @@ export async function GET(request: Request) {
 
   const cacheKey = buildRouteCacheKey(profile, latU, lonU, latH, lonH);
   const cached = readCache(cacheKey);
-  const cachedValue = cached ? (cached.value as any) : null;
-  const cachedIsApprox = !!(cachedValue && typeof cachedValue === "object" && cachedValue.aproximada === true);
+  const cachedValue = cached ? cached.value : null;
+  const cachedObj = cachedValue && typeof cachedValue === "object" ? (cachedValue as Record<string, unknown>) : null;
+  const cachedIsApprox = !!(cachedObj && cachedObj["aproximada"] === true);
   const usableCached = cached && !cachedIsApprox ? cached : null;
   if (usableCached && !usableCached.stale) return NextResponse.json(usableCached.value, { status: 200 });
 
   try {
-    const localBase = process.env.OSRM_BASE_URL ? String(process.env.OSRM_BASE_URL) : "http://localhost:5000";
+    const localBase = process.env.OSRM_BASE_URL ? String(process.env.OSRM_BASE_URL).trim() : "";
     const candidates = [localBase, "https://router.project-osrm.org", "https://routing.openstreetmap.de/routed-car"]
       .map((s) => String(s || "").trim())
       .filter(Boolean)
@@ -282,10 +291,10 @@ export async function GET(request: Request) {
     }
 
     if (usableCached) {
-      const v = usableCached.value as any;
+      const v = usableCached.value;
       const result =
         v && typeof v === "object"
-          ? { ...v, warning: "Usando ruta en caché (puede estar desactualizada)." }
+          ? { ...(v as Record<string, unknown>), warning: "Usando ruta en caché (puede estar desactualizada)." }
           : usableCached.value;
       return NextResponse.json(result, { status: 200 });
     }
@@ -295,10 +304,10 @@ export async function GET(request: Request) {
   } catch (e) {
     const isAbort = e && typeof e === "object" && "name" in e && e.name === "AbortError";
     if (usableCached) {
-      const v = usableCached.value as any;
+      const v = usableCached.value;
       const result =
         v && typeof v === "object"
-          ? { ...v, warning: "Usando ruta en caché (el servicio de rutas no respondió)." }
+          ? { ...(v as Record<string, unknown>), warning: "Usando ruta en caché (el servicio de rutas no respondió)." }
           : usableCached.value;
       return NextResponse.json(result, { status: 200 });
     }

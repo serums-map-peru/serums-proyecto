@@ -125,7 +125,7 @@ export async function POST(request: Request) {
   const name = body && typeof body.name === "string" ? body.name : null;
   const lat = body && typeof body.lat === "number" ? body.lat : null;
   const lon = body && typeof body.lon === "number" ? body.lon : null;
-  const meta = body && "meta" in body ? (body as any).meta : null;
+  const meta = body && typeof body === "object" ? body["meta"] : null;
 
   const type = String(item_type || "").trim().toLowerCase();
   const id = String(item_id || "").trim();
@@ -153,4 +153,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true }, { status: 200 });
 }
-
