@@ -488,17 +488,10 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
   focus,
 }: HospitalMapProps) {
   const routeLatLngs = React.useMemo(() => {
+    if (route?.aproximada) return null;
     const coords = route?.geometria?.coordinates;
     if (!coords || coords.length === 0) return null;
     return coords.map(([lon, lat]) => [lat, lon] as [number, number]);
-  }, [route]);
-
-  const routeStyle = React.useMemo(() => {
-    if (!route) return null;
-    if (route.aproximada) {
-      return { color: "#94a3b8", weight: 4, opacity: 0.85, dashArray: "8 10" } as const;
-    }
-    return { color: "#0ea5e9", weight: 5, opacity: 0.9 } as const;
   }, [route]);
 
   const userIcon = React.useMemo(() => createUserIcon(), []);
@@ -622,8 +615,8 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           </>
         ) : null}
 
-        {routeLatLngs && routeStyle ? (
-          <Polyline positions={routeLatLngs} pathOptions={routeStyle} interactive={false} />
+        {routeLatLngs ? (
+          <Polyline positions={routeLatLngs} pathOptions={{ color: "#0ea5e9", weight: 5, opacity: 0.9 }} interactive={false} />
         ) : null}
 
         <ClusteredHospitalsLayer

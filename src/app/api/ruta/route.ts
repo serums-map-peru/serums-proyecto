@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const OSRM_TIMEOUT_MS = 12_000;
+const OSRM_TIMEOUT_MS = 20_000;
 const ROUTE_CACHE_TTL_MS = 10 * 60_000;
 const ROUTE_CACHE_MAX_STALE_MS = 7 * 24 * 60 * 60_000;
 const ROUTE_CACHE_MAX = 800;
@@ -93,15 +93,35 @@ async function fetchOsrmRoute(
   const root = String(baseUrl || "").trim().replace(/\/$/, "");
   if (!root) return null;
 
-  const radius = profile === "walking" ? 5_000 : 20_000;
-  const radiuses = `${radius};${radius}`;
-  const upstream = `${root}/route/v1/${profile}/${lonU},${latU};${lonH},${latH}?overview=full&geometries=geojson&steps=false&radiuses=${encodeURIComponent(
-    radiuses,
-  )}`;
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), Math.max(500, Math.round(timeoutMs)));
+
   try {
+    const nearest = async (lat: number, lon: number) => {
+      const url = `${root}/nearest/v1/${profile}/${lon},${lat}?number=1`;
+      const res = await fetch(url, { headers: { accept: "application/json" }, signal: controller.signal }).catch(() => null);
+      if (!res || !res.ok) return null;
+      const body = (await res.json().catch(() => null)) as any;
+      const wp = body && Array.isArray(body.waypoints) && body.waypoints[0] ? body.waypoints[0] : null;
+      const loc = wp && Array.isArray(wp.location) ? wp.location : null;
+      if (!loc || loc.length !== 2) return null;
+      const snappedLon = Number(loc[0]);
+      const snappedLat = Number(loc[1]);
+      if (!Number.isFinite(snappedLat) || !Number.isFinite(snappedLon)) return null;
+      return { lat: snappedLat, lon: snappedLon };
+    };
+
+    const snapA = await nearest(latU, lonU);
+    const snapB = await nearest(latH, lonH);
+    const a = snapA || { lat: latU, lon: lonU };
+    const b = snapB || { lat: latH, lon: lonH };
+
+    const radius = profile === "walking" ? 15_000 : 60_000;
+    const radiuses = `${radius};${radius}`;
+    const upstream = `${root}/route/v1/${profile}/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson&steps=false&radiuses=${encodeURIComponent(
+      radiuses,
+    )}`;
+
     for (let attempt = 0; attempt < 2; attempt++) {
       const res = await fetch(upstream, { headers: { accept: "application/json" }, signal: controller.signal }).catch(() => null);
       if (!res) {
@@ -140,7 +160,7 @@ async function fetchOsrmRoute(
 
 async function fetchValhallaRoute(profile: string, latU: number, lonU: number, latH: number, lonH: number, timeoutMs: number) {
   const costing = profile === "walking" ? "pedestrian" : "auto";
-  const radius = profile === "walking" ? 5_000 : 20_000;
+  const radius = profile === "walking" ? 15_000 : 60_000;
   const payload = {
     locations: [
       { lat: latU, lon: lonU, type: "break", radius },
@@ -241,7 +261,7 @@ export async function GET(request: Request) {
 
   try {
     const localBase = process.env.OSRM_BASE_URL ? String(process.env.OSRM_BASE_URL) : "http://localhost:5000";
-    const candidates = [localBase, "https://router.project-osrm.org"]
+    const candidates = [localBase, "https://router.project-osrm.org", "https://routing.openstreetmap.de/routed-car"]
       .map((s) => String(s || "").trim())
       .filter(Boolean)
       .filter((v, i, a) => a.indexOf(v) === i);
