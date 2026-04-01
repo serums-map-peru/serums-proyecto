@@ -22,7 +22,10 @@ type FieldErrors = Partial<Record<"firstName" | "lastName" | "email" | "password
 function apiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (configured && configured.trim().length > 0) return configured.trim().replace(/\/$/, "");
-  return "http://localhost:4000/api";
+  if (typeof window !== "undefined" && window.location && window.location.host) {
+    return `${window.location.protocol}//${window.location.host}/api`;
+  }
+  return "http://localhost:3000/api";
 }
 
 function isValidEmailFormat(email: string) {

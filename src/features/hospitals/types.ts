@@ -76,6 +76,8 @@ export type RouteResponse = {
     type: "LineString";
     coordinates: Array<[number, number]>;
   };
+  aproximada?: boolean;
+  warning?: string;
 };
 
 export type NearbyPlace = {

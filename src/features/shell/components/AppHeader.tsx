@@ -273,7 +273,7 @@ export function AppHeader({
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={onRetrySearch}
                       >
-                        Reintentar
+                        Buscar de nuevo
                       </button>
                     ) : null}
                   </div>
@@ -606,7 +606,7 @@ export function AppHeader({
                         className="w-fit rounded-2xl border border-[var(--border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] hover:bg-black/[0.03]"
                         onClick={onRetrySearch}
                       >
-                        Reintentar
+                        Buscar de nuevo
                       </button>
                     ) : null}
                   </div>

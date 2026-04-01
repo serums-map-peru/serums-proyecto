@@ -144,7 +144,6 @@ function createMedicalPinDivIcon({
   showLabel: boolean;
 }) {
   const fill = institucionGroupColor(institucion);
-  const cat = categoriaNumber(categoria);
   const safeLabel = escapeHtml(label || "");
 
   const height = Math.round(size * 1.35);
@@ -168,25 +167,6 @@ function createMedicalPinDivIcon({
     <div class="serums-marker-bounce" style="display:grid;gap:6px;place-items:center;transform-origin:50% 100%;">
       <div style="position:relative;width:${size}px;height:${height}px;filter:drop-shadow(${shadow});">
         ${iconSvg}
-        ${
-          cat
-            ? `<div style="
-                position:absolute;
-                right:-6px;
-                top:-6px;
-                width:18px;
-                height:18px;
-                border-radius:9999px;
-                background:rgba(255,255,255,0.95);
-                border:1px solid rgba(0,0,0,0.08);
-                display:grid;
-                place-items:center;
-                font-size:11px;
-                font-weight:800;
-                color:rgba(29,29,31,0.92);
-              ">${cat}</div>`
-            : ""
-        }
       </div>
       ${
         showLabel
@@ -513,6 +493,14 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
     return coords.map(([lon, lat]) => [lat, lon] as [number, number]);
   }, [route]);
 
+  const routeStyle = React.useMemo(() => {
+    if (!route) return null;
+    if (route.aproximada) {
+      return { color: "#94a3b8", weight: 4, opacity: 0.85, dashArray: "8 10" } as const;
+    }
+    return { color: "#0ea5e9", weight: 5, opacity: 0.9 } as const;
+  }, [route]);
+
   const userIcon = React.useMemo(() => createUserIcon(), []);
   const iconHospedajes = React.useMemo(() => createPlaceIcon("#f59e0b"), []);
   const iconRestaurantes = React.useMemo(() => createPlaceIcon("#ef4444"), []);
@@ -634,8 +622,8 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           </>
         ) : null}
 
-        {routeLatLngs ? (
-          <Polyline positions={routeLatLngs} pathOptions={{ color: "#0ea5e9", weight: 5, opacity: 0.9 }} />
+        {routeLatLngs && routeStyle ? (
+          <Polyline positions={routeLatLngs} pathOptions={routeStyle} interactive={false} />
         ) : null}
 
         <ClusteredHospitalsLayer

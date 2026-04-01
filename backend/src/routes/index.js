@@ -6,6 +6,7 @@ const { authRouter } = require("./authRoutes");
 const { docsRouter } = require("./docsRoutes");
 const { osmRouter } = require("./osmRoutes");
 const { favoritesRouter } = require("./favoritesRoutes");
+const { commentsRouter } = require("./commentsRoutes");
 
 const router = express.Router();
 
@@ -13,6 +14,7 @@ router.use(healthRouter);
 router.use(hospitalsRouter);
 router.use(authRouter);
 router.use(favoritesRouter);
+router.use(commentsRouter);
 router.use(osmRouter);
 router.use(docsRouter);
 

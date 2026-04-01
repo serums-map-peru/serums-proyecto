@@ -13,7 +13,7 @@ export function createInitialHospitalFilters(): HospitalFilters {
     categoria: [],
     zaf: null,
     ze: null,
-    serums_periodo: null,
+    serums_periodo: "2025-I",
     serums_modalidad: null,
     airport_hours_max: null,
   };
@@ -23,9 +23,9 @@ function getApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (configured && configured.trim().length > 0) return configured.trim().replace(/\/$/, "");
   if (typeof window !== "undefined" && window.location && window.location.hostname) {
-    return `${window.location.protocol}//${window.location.hostname}:4000/api`;
+    return `${window.location.protocol}//${window.location.host}/api`;
   }
-  return "http://localhost:4000/api";
+  return "http://localhost:3000/api";
 }
 
 function buildHospitalQuery(filters: HospitalFilters) {

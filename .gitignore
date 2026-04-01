@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+.appdata/
+validate_all.log
+*.csv
+*.dbf
 
 # debug
 npm-debug.log*

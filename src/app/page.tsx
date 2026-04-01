@@ -44,7 +44,14 @@ type PendingFavorite =
 
 function MapLegendCard() {
   const [open, setOpen] = React.useState(false);
-  const [infoOpen, setInfoOpen] = React.useState(false);
+  const definitionsTitle =
+    "I-1: Con profesional de salud, no médico.\n" +
+    "I-2: Con médico.\n" +
+    "I-3: + odontólogo + técnicos + patología.\n" +
+    "I-4: + imágenes e internamiento.\n" +
+    "GD-1 a GD-5: Grado de dificultad geográfica (GD-5 = zona muy remota).\n" +
+    "ZAF: Zona de Atención Focalizada (zona prioritaria).\n" +
+    "ZE: Zona de Emergencia.";
 
   const LegendPin = React.useCallback(({ color }: { color: string }) => {
     return (
@@ -81,10 +88,10 @@ function MapLegendCard() {
   ];
 
   return (
-    <div className="w-[320px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 shadow-[var(--shadow-soft)] backdrop-blur">
+    <div className="w-[220px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 shadow-[var(--shadow-soft)] backdrop-blur">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-5 py-4"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
@@ -114,7 +121,7 @@ function MapLegendCard() {
         className="transition-[max-height,opacity] duration-300 ease-out"
         style={{ maxHeight: open ? "70vh" : 0, opacity: open ? 1 : 0, overflowY: open ? "auto" : "hidden" }}
       >
-        <div className="grid gap-3 px-5 pb-7 pr-5">
+        <div className="grid gap-3 px-4 pb-5 pr-4">
           <div className="grid gap-2">
             <div className="text-xs font-semibold text-[var(--title)]">Institución</div>
             <div className="grid gap-2">
@@ -123,13 +130,9 @@ function MapLegendCard() {
                   key={i.label}
                   className="flex items-center justify-start gap-3 rounded-[var(--radius-card)] bg-[var(--background-secondary)] px-3 py-2"
                 >
-                  <div className="grid min-w-0 gap-0.5">
-                    <div className="text-xs font-semibold text-[var(--title)]" title={i.description}>
-                      {i.label}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="shrink-0">{LegendPin({ color: i.color })}</div>
+                  <div className="shrink-0">{LegendPin({ color: i.color })}</div>
+                  <div className="min-w-0 text-xs font-semibold text-[var(--title)]" title={i.description}>
+                    {i.label}
                   </div>
                 </div>
               ))}
@@ -137,49 +140,19 @@ function MapLegendCard() {
           </div>
 
           <div className="grid gap-2">
-            <div className="text-xs font-semibold text-[var(--title)]">Categoría</div>
+            <div className="text-xs font-semibold text-[var(--title)]" title={definitionsTitle}>
+              Categoría
+            </div>
             <div className="flex flex-wrap gap-2">
               {categorias.map((c) => (
                 <div
                   key={c.label}
-                  className="flex items-center gap-2 rounded-full bg-[var(--background-secondary)] px-3 py-2"
+                  className="rounded-full bg-[var(--background-secondary)] px-3 py-2"
                   title={c.description}
                 >
-                  <div className="grid h-5 w-5 place-items-center rounded-full bg-white shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                    <span className="text-[11px] font-extrabold text-[var(--title)]">{c.label.replace("I-", "")}</span>
-                  </div>
                   <span className="text-xs font-medium text-[var(--label)]">{c.label}</span>
                 </div>
               ))}
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="button"
-                className="w-full rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 py-2 text-left text-xs font-semibold text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] hover:bg-black/[0.03]"
-                onClick={() => setInfoOpen((v) => !v)}
-                aria-expanded={infoOpen}
-              >
-                Definiciones clave
-              </button>
-              <div
-                className="mt-2 overflow-hidden transition-[max-height,opacity] duration-200 ease-out"
-                style={{ maxHeight: infoOpen ? "60vh" : 0, opacity: infoOpen ? 1 : 0 }}
-              >
-                <div className="rounded-[var(--radius-card)] border border-[var(--border)] bg-white p-3 shadow-[var(--shadow-soft)] mb-2">
-
-                  <div className="mt-3 text-xs font-semibold text-[var(--title)]">Definiciones</div>
-                  <ul className="mt-2 list-disc list-inside space-y-1 text-xs font-medium text-[var(--label)]">
-                    <li>I-1: Con profesional de salud, no médico.</li>
-                    <li>I-2: Con médico.</li>
-                    <li>I-3: + odontólogo + técnicos + patología.</li>
-                    <li>I-4: + imágenes e internamiento.</li>
-                    <li>GD-1 a GD-5: Grado de dificultad geográfica (GD-5 = zona muy remota).</li>
-                    <li>ZAF: Zona de Atención Focalizada (zona prioritaria).</li>
-                    <li>ZE: Zona de Emergencia.</li>
-                  </ul>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -271,7 +244,10 @@ export default function HomePage() {
   const apiBase = React.useMemo(() => {
     const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
     if (configured && configured.trim().length > 0) return configured.trim().replace(/\/$/, "");
-    return "http://localhost:4000/api";
+    if (typeof window !== "undefined" && window.location && window.location.hostname) {
+      return `${window.location.protocol}//${window.location.host}/api`;
+    }
+    return "http://localhost:3000/api";
   }, []);
 
   const legendGroups = React.useMemo<LegendGroups>(() => {
@@ -380,6 +356,11 @@ export default function HomePage() {
   const [favoritesSearch, setFavoritesSearch] = React.useState("");
   const [notesOpenByFavoriteId, setNotesOpenByFavoriteId] = React.useState<Record<string, boolean>>({});
 
+  const [commentDraftByHospitalId, setCommentDraftByHospitalId] = React.useState<Record<string, string>>({});
+  const [commentLoadingId, setCommentLoadingId] = React.useState<string | null>(null);
+  const [commentSavingId, setCommentSavingId] = React.useState<string | null>(null);
+  const [commentErrorByHospitalId, setCommentErrorByHospitalId] = React.useState<Record<string, string | null>>({});
+
   const setAuthQuery = React.useCallback((mode: "login" | "register" | null) => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -457,6 +438,85 @@ export default function HomePage() {
       setFavoritesLoading(false);
     }
   }, [apiBase, extractApiErrorMessage]);
+
+  React.useEffect(() => {
+    if (!favoritesEnabled) return;
+    if (!selectedHospitalId) return;
+    if (!detailOpen) return;
+    const token = getAuthToken();
+    if (!token) return;
+
+    const hospitalId = selectedHospitalId;
+    setCommentLoadingId(hospitalId);
+    setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: null }));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15_000);
+    fetch(`${apiBase}/comentarios/hospitales/${encodeURIComponent(hospitalId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo cargar el comentario."));
+        const comment =
+          body && typeof body === "object" && "comment" in body && typeof (body as any).comment === "string"
+            ? String((body as any).comment)
+            : "";
+        setCommentDraftByHospitalId((prev) => {
+          if (prev[hospitalId] != null) return prev;
+          return { ...prev, [hospitalId]: comment };
+        });
+      })
+      .catch((e) => {
+        if (e && typeof e === "object" && "name" in e && e.name === "AbortError") {
+          setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: "Servicio lento. Buscar de nuevo." }));
+          return;
+        }
+        setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: e instanceof Error ? e.message : "No se pudo cargar el comentario." }));
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        setCommentLoadingId((cur) => (cur === hospitalId ? null : cur));
+      });
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [apiBase, detailOpen, extractApiErrorMessage, favoritesEnabled, selectedHospitalId]);
+
+  const saveHospitalComment = React.useCallback(
+    async (hospitalId: string) => {
+      const token = getAuthToken();
+      if (!token) {
+        setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: "Inicia sesión para guardar comentarios." }));
+        return;
+      }
+      const draft = commentDraftByHospitalId[hospitalId] ?? "";
+      setCommentSavingId(hospitalId);
+      setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: null }));
+      try {
+        const r = await fetch(`${apiBase}/comentarios/hospitales/${encodeURIComponent(hospitalId)}`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({ comment: draft }),
+        });
+        const body = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo guardar el comentario."));
+        const comment =
+          body && typeof body === "object" && "comment" in body && typeof (body as any).comment === "string"
+            ? String((body as any).comment)
+            : "";
+        setCommentDraftByHospitalId((p) => ({ ...p, [hospitalId]: comment }));
+      } catch (e) {
+        setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: e instanceof Error ? e.message : "No se pudo guardar el comentario." }));
+      } finally {
+        setCommentSavingId((cur) => (cur === hospitalId ? null : cur));
+      }
+    },
+    [apiBase, commentDraftByHospitalId, extractApiErrorMessage],
+  );
 
   const extractNotes = React.useCallback((meta: unknown) => {
     if (!meta || typeof meta !== "object") return "";
@@ -726,31 +786,30 @@ export default function HomePage() {
       }, 10_000);
       fetch(`${apiBase}/buscar?q=${encodeURIComponent(query)}`, { signal: controller.signal })
         .then(async (r) => {
-          if (!r.ok) {
-            const body = await r.json().catch(() => null);
-            const message =
-              body && typeof body === "object" && body.error && body.error.message
-                ? String(body.error.message)
-                : "Error al buscar. Reintenta.";
-            throw new Error(message);
+          const body = await r.json().catch(() => null);
+          if (Array.isArray(body)) return { results: body as NominatimResult[], warning: null as string | null };
+          if (body && typeof body === "object" && "results" in body && Array.isArray((body as any).results)) {
+            const warning =
+              "warning" in body && typeof (body as any).warning === "string" ? String((body as any).warning) : null;
+            return { results: (body as any).results as NominatimResult[], warning };
           }
-          return r.json() as Promise<NominatimResult[]>;
+          if (!r.ok) throw new Error("Error al buscar. Buscar de nuevo.");
+          return { results: [] as NominatimResult[], warning: null as string | null };
         })
-        .then((data) => {
-          setSearchResults(Array.isArray(data) ? data : []);
+        .then(({ results, warning }) => {
+          setSearchResults(Array.isArray(results) ? results : []);
           setSearchLoading(false);
+          if (warning && !results.length) setSearchError(warning);
         })
         .catch((e) => {
           if (e && e.name === "AbortError") {
             if (!didTimeout) return;
-            setSearchResults([]);
             setSearchLoading(false);
-            setSearchError("Servicio de búsqueda lento o no disponible. Reintenta.");
+            setSearchError("Servicio de búsqueda lento o no disponible. Buscar de nuevo.");
             return;
           }
-          setSearchResults([]);
           setSearchLoading(false);
-          setSearchError(e instanceof Error ? e.message : "Error al buscar. Reintenta.");
+          setSearchError(e instanceof Error ? e.message : "Error al buscar. Buscar de nuevo.");
         })
         .finally(() => clearTimeout(timeoutId));
     }, 320);
@@ -874,23 +933,6 @@ export default function HomePage() {
     setRouteError(null);
     setLocationError(null);
     try {
-      if (travelMode === "avion") {
-        setRoute(null);
-        setNearestAirport(null);
-        setAirportDriveRoute(null);
-        setAirportError(null);
-        setActiveTrip({
-          hospitalId: selectedHospital.id,
-          hospitalName: toTitleCase(selectedHospital.nombre_establecimiento),
-          lat: selectedHospital.lat,
-          lng: selectedHospital.lng,
-          mode: "avion",
-        });
-        if (approxWarning) setRouteError(approxWarning);
-        setFocus(null);
-        return;
-      }
-
       const origin =
         routeOrigin.type === "user"
           ? await requestGeolocation()
@@ -907,22 +949,38 @@ export default function HomePage() {
       }).toString();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15_000);
-      let r;
       try {
-        r = await fetch(`${apiBase}/ruta?${qs}`, { signal: controller.signal });
+        const r = await fetch(`${apiBase}/ruta?${qs}`, { signal: controller.signal });
+        const body = await r.json().catch(() => null);
+        const isValid =
+          body &&
+          typeof body === "object" &&
+          typeof (body as any).distancia === "number" &&
+          typeof (body as any).duracion === "number" &&
+          (body as any).geometria &&
+          typeof (body as any).geometria === "object" &&
+          (body as any).geometria.type === "LineString" &&
+          Array.isArray((body as any).geometria.coordinates);
+
+        if (r.ok && isValid) {
+          setRoute(body as RouteResponse);
+        } else {
+          const fallbackDist = haversineMeters(
+            { lat: origin.lat, lng: origin.lng },
+            { lat: selectedHospital.lat, lng: selectedHospital.lng },
+          );
+          const fallback: RouteResponse = {
+            distancia: fallbackDist,
+            duracion: fallbackDist / 13.9,
+            geometria: { type: "LineString", coordinates: [[origin.lng, origin.lat], [selectedHospital.lng, selectedHospital.lat]] },
+            aproximada: true,
+            warning: "No se pudo calcular ruta exacta. Mostrando ruta aproximada.",
+          };
+          setRoute(fallback);
+        }
       } finally {
         clearTimeout(timeoutId);
       }
-      if (!r.ok) {
-        const body = await r.json().catch(() => null);
-        const message =
-          body && typeof body === "object" && body.error && body.error.message
-            ? String(body.error.message)
-            : "Error al calcular ruta. Reintenta.";
-        throw new Error(message);
-      }
-      const data = (await r.json()) as RouteResponse;
-      setRoute(data);
       setNearestAirport(null);
       setAirportDriveRoute(null);
       setAirportError(null);
@@ -931,20 +989,41 @@ export default function HomePage() {
         hospitalName: toTitleCase(selectedHospital.nombre_establecimiento),
         lat: selectedHospital.lat,
         lng: selectedHospital.lng,
-        mode: travelMode,
+        mode: "carro",
       });
       if (approxWarning) setRouteError(approxWarning);
       setFocus(null);
     } catch (e) {
       const msg =
         e && typeof e === "object" && "name" in e && e.name === "AbortError"
-          ? "Servicio de rutas lento o no disponible. Reintenta."
+          ? "Servicio de rutas lento o no disponible. Mostrando ruta aproximada."
           : geolocationErrorMessage(e);
+      try {
+        const origin =
+          routeOrigin.type === "user"
+            ? userLocation
+            : { lat: routeOrigin.lat, lng: routeOrigin.lng, accuracy: null };
+        if (origin && Number.isFinite(origin.lat) && Number.isFinite(origin.lng)) {
+          const dist = haversineMeters(
+            { lat: origin.lat, lng: origin.lng },
+            { lat: selectedHospital.lat, lng: selectedHospital.lng },
+          );
+          const fallback: RouteResponse = {
+            distancia: dist,
+            duracion: dist / 13.9,
+            geometria: { type: "LineString", coordinates: [[origin.lng, origin.lat], [selectedHospital.lng, selectedHospital.lat]] },
+            aproximada: true,
+            warning: msg,
+          };
+          setRoute(fallback);
+        }
+      } catch {
+      }
       setRouteError(approxWarning ? `${approxWarning} ${msg}` : msg);
     } finally {
       setRouteLoading(false);
     }
-  }, [apiBase, requestGeolocation, routeOrigin, selectedHospital, travelMode]);
+  }, [apiBase, requestGeolocation, routeOrigin, selectedHospital, userLocation]);
 
   React.useEffect(() => {
     if (!activeTrip) return;
@@ -1201,8 +1280,6 @@ export default function HomePage() {
       setHospitalQuery(h.id);
       setNearby(null);
       setNearbyError(null);
-      setNearbyFilterTypes([]);
-      setNearbyRadiusKm(2);
       setHoveredNearbyId(null);
       setSelectedNearbyId(null);
       setFocusNearbyId(null);
@@ -1679,7 +1756,7 @@ export default function HomePage() {
 
             <div className="absolute right-3 top-3 z-[1200] hidden sm:block">
               <div className="grid gap-2">
-                <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur">
+                <div className="w-[220px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur">
                   <div className="text-sm font-semibold text-[var(--title)]">
                     {loading ? "Cargando…" : `${hospitalsForMapAfterLegend.length} establecimientos`}
                   </div>
@@ -1697,7 +1774,7 @@ export default function HomePage() {
                 <MapLegendCard />
 
                 {activeTrip && activeTripSummary ? (
-                  <div className="w-[320px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur">
+                  <div className="w-[220px] overflow-hidden rounded-[var(--radius-panel)] bg-white/95 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur">
                     <div className="text-[11px] font-semibold text-[var(--title)]">
                       Ruta activa · {activeTripSummary.label}
                     </div>
@@ -1967,6 +2044,19 @@ export default function HomePage() {
         onRequestNearby={selectedHospital ? handleRequestNearby : undefined}
         onRequestGeocode={selectedHospital ? handleRequestGeocode : undefined}
         favoritesEnabled={favoritesEnabled}
+        commentEnabled={favoritesEnabled}
+        comment={selectedHospitalId ? (commentDraftByHospitalId[selectedHospitalId] ?? "") : ""}
+        commentLoading={!!(selectedHospitalId && commentLoadingId === selectedHospitalId)}
+        commentSaving={!!(selectedHospitalId && commentSavingId === selectedHospitalId)}
+        commentError={selectedHospitalId ? (commentErrorByHospitalId[selectedHospitalId] ?? null) : null}
+        onChangeComment={(next) => {
+          if (!selectedHospitalId) return;
+          setCommentDraftByHospitalId((p) => ({ ...p, [selectedHospitalId]: next }));
+        }}
+        onSaveComment={() => {
+          if (!selectedHospitalId) return;
+          saveHospitalComment(selectedHospitalId);
+        }}
         isHospitalFavorited={
           !!(selectedHospital && favorites.some((f) => f.item_type === "hospital" && f.item_id === selectedHospital.id))
         }

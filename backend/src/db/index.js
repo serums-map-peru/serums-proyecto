@@ -644,6 +644,18 @@ function initSchema(db) {
       UNIQUE(user_id, item_type, item_id)
     );
 
+    CREATE TABLE IF NOT EXISTS hospital_comments (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      hospital_id TEXT NOT NULL,
+      comment TEXT NOT NULL,
+      created_at TEXT,
+      updated_at TEXT,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE,
+      UNIQUE(user_id, hospital_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_hospitals_departamento ON hospitals(departamento);
     CREATE INDEX IF NOT EXISTS idx_hospitals_provincia ON hospitals(provincia);
     CREATE INDEX IF NOT EXISTS idx_hospitals_distrito ON hospitals(distrito);
@@ -656,6 +668,7 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_serums_offers_profesion ON serums_offers(profesion);
     CREATE INDEX IF NOT EXISTS idx_serums_offers_codigo ON serums_offers(codigo_renipress_modular);
     CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
+    CREATE INDEX IF NOT EXISTS idx_hospital_comments_user ON hospital_comments(user_id);
   `);
 
   ensureColumn(db, "users", "role TEXT NOT NULL DEFAULT 'user'", "role");
@@ -761,6 +774,22 @@ async function ensureSchemaReady() {
           CONSTRAINT fk_favorites_user
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
           UNIQUE(user_id, item_type, item_id)
+        );
+      `);
+
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS hospital_comments (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          hospital_id TEXT NOT NULL,
+          comment TEXT NOT NULL,
+          created_at TIMESTAMPTZ,
+          updated_at TIMESTAMPTZ,
+          CONSTRAINT fk_hospital_comments_user
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+          CONSTRAINT fk_hospital_comments_hospital
+            FOREIGN KEY(hospital_id) REFERENCES hospitals(id) ON DELETE CASCADE,
+          UNIQUE (user_id, hospital_id)
         );
       `);
 

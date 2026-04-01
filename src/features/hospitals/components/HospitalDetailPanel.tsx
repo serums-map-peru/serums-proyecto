@@ -64,6 +64,13 @@ export type HospitalDetailPanelProps = {
   onToggleFavoritePlace?: (place: NearbyPlace, group: string) => void;
   isPlaceFavorited?: (placeId: string) => boolean;
   onRequestAuthForFavorites?: () => void;
+  commentEnabled?: boolean;
+  comment?: string;
+  commentLoading?: boolean;
+  commentSaving?: boolean;
+  commentError?: string | null;
+  onChangeComment?: (next: string) => void;
+  onSaveComment?: () => void;
 };
 
 function formatDistance(meters: number) {
@@ -82,8 +89,59 @@ function formatDuration(seconds: number) {
 }
 
 function mapsUrlForPlace(p: NearbyPlace) {
-  const name = p.name ? ` ${p.name}` : "";
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${p.lat},${p.lon}${name}`)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${p.lat},${p.lon}`)}`;
+}
+
+function mapsUrlForHospital(
+  h: {
+    nombre_establecimiento?: string | null;
+    departamento?: string | null;
+    provincia?: string | null;
+    distrito?: string | null;
+    coordenadas_fuente?: string | null;
+    lat?: number;
+    lng?: number;
+  } | null,
+) {
+  if (!h) return "";
+  const lat = typeof h.lat === "number" ? h.lat : NaN;
+  const lng = typeof h.lng === "number" ? h.lng : NaN;
+  const source = String(h.coordenadas_fuente || "").toUpperCase();
+  const isApprox = source.includes("CENTROID");
+
+  const name = String(h.nombre_establecimiento || "").trim();
+  const distrito = String(h.distrito || "").trim();
+  const provincia = String(h.provincia || "").trim();
+  const departamento = String(h.departamento || "").trim();
+
+  if (Number.isFinite(lat) && Number.isFinite(lng) && !isApprox) {
+    const qs = new URLSearchParams({
+      api: "1",
+      map_action: "map",
+      center: `${lat},${lng}`,
+      zoom: "18",
+      query: name ? `${lat},${lng} ${name}` : `${lat},${lng}`,
+    }).toString();
+    return `https://www.google.com/maps/@?${qs}`;
+  }
+
+  const text = [name, distrito, provincia, departamento, "Perú"].filter(Boolean).join(", ");
+  if (!text) return "";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}`;
+}
+
+function directionsUrl(origin: { lat: number; lng: number } | null, dest: { lat: number; lng: number } | null) {
+  if (!dest) return "";
+  if (!Number.isFinite(dest.lat) || !Number.isFinite(dest.lng)) return "";
+  const qs = new URLSearchParams({
+    api: "1",
+    destination: `${dest.lat},${dest.lng}`,
+    travelmode: "driving",
+    ...(origin && Number.isFinite(origin.lat) && Number.isFinite(origin.lng)
+      ? { origin: `${origin.lat},${origin.lng}` }
+      : {}),
+  }).toString();
+  return `https://www.google.com/maps/dir/?${qs}`;
 }
 
 function toTitleCase(value: string) {
@@ -159,6 +217,97 @@ function HeartIcon({ filled }: { filled: boolean }) {
         strokeWidth="1.6"
         strokeLinejoin="round"
         fill={filled ? "currentColor" : "none"}
+      />
+    </svg>
+  );
+}
+
+function MapIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+      <path
+        d="M12 21s6-6 6-10a6 6 0 1 0-12 0c0 4 6 10 6 10Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 13.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+
+function WhatsappIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+      <path
+        d="M12 21.3a9.2 9.2 0 0 1-4.5-1.2L3 21l1.1-4.3A9.2 9.2 0 1 1 12 21.3Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.2 8.6c.2-.5.5-.5.8-.5h.6c.2 0 .4.1.5.4l.7 1.7c.1.2.1.5-.1.7l-.4.5c-.1.1-.1.3 0 .5.6 1.1 1.5 2 2.6 2.6.2.1.4.1.5 0l.5-.4c.2-.2.5-.2.7-.1l1.7.7c.3.1.4.3.4.5v.6c0 .3 0 .6-.5.8-.4.2-1.1.3-2.1.1-1-.2-2.4-.8-3.8-2.2-1.4-1.4-2-2.8-2.2-3.8-.2-1 0-1.7.1-2.1Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+      <path
+        d="M9 9h9v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V11a2 2 0 0 1 2-2Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function FacebookIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+      <path
+        d="M14 8h2V5h-2c-2.2 0-4 1.8-4 4v2H8v3h2v6h3v-6h2.1l.9-3H13V9c0-.6.4-1 1-1Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function TwitterIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+      <path
+        d="M8 20h3.3L20 4h-3.3L8 20ZM4 4l8 10"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13 14l7 6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
@@ -254,6 +403,13 @@ export function HospitalDetailPanel({
   onToggleFavoritePlace,
   isPlaceFavorited,
   onRequestAuthForFavorites,
+  commentEnabled = false,
+  comment = "",
+  commentLoading = false,
+  commentSaving = false,
+  commentError = null,
+  onChangeComment,
+  onSaveComment,
 }: HospitalDetailPanelProps) {
   const imageUrl = hospital && hospital.imagenes && hospital.imagenes.length > 0 ? hospital.imagenes[0] : null;
   const [imageOk, setImageOk] = React.useState(true);
@@ -324,6 +480,24 @@ export function HospitalDetailPanel({
 
   React.useEffect(() => {
     const q = originQuery.trim();
+    const coordMatch = q.match(/^\s*(-?\d{1,2}(?:[.,]\d+)?)\s*,\s*(-?\d{1,3}(?:[.,]\d+)?)\s*$/);
+    if (coordMatch) {
+      const lat = Number(String(coordMatch[1]).replace(",", "."));
+      const lng = Number(String(coordMatch[2]).replace(",", "."));
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        setOriginResults([
+          {
+            place_id: -1,
+            display_name: `Coordenadas: ${lat}, ${lng}`,
+            lat: String(lat),
+            lon: String(lng),
+          },
+        ]);
+        setOriginLoading(false);
+        setOriginError(null);
+        return;
+      }
+    }
     if (q.length < 3) {
       setOriginResults([]);
       setOriginLoading(false);
@@ -342,31 +516,30 @@ export function HospitalDetailPanel({
       }, 10_000);
       fetch(`${apiBase}/buscar?q=${encodeURIComponent(q)}`, { signal: controller.signal })
         .then(async (r) => {
-          if (!r.ok) {
-            const body = await r.json().catch(() => null);
-            const message =
-              body && typeof body === "object" && body.error && body.error.message
-                ? String(body.error.message)
-                : "Error al buscar. Reintenta.";
-            throw new Error(message);
+          const body = await r.json().catch(() => null);
+          if (Array.isArray(body)) return { results: body as NominatimResult[], warning: null as string | null };
+          if (body && typeof body === "object" && "results" in body && Array.isArray((body as any).results)) {
+            const warning =
+              "warning" in body && typeof (body as any).warning === "string" ? String((body as any).warning) : null;
+            return { results: (body as any).results as NominatimResult[], warning };
           }
-          return r.json() as Promise<NominatimResult[]>;
+          if (!r.ok) throw new Error("Error al buscar. Buscar de nuevo.");
+          return { results: [] as NominatimResult[], warning: null as string | null };
         })
-        .then((data) => {
-          setOriginResults(Array.isArray(data) ? data : []);
+        .then(({ results, warning }) => {
+          setOriginResults(Array.isArray(results) ? results : []);
           setOriginLoading(false);
+          if (warning && !results.length) setOriginError(warning);
         })
         .catch((e) => {
           if (e && e.name === "AbortError") {
             if (!didTimeout) return;
-            setOriginResults([]);
             setOriginLoading(false);
-            setOriginError("Servicio de búsqueda lento o no disponible. Reintenta.");
+            setOriginError("Servicio de búsqueda lento o no disponible. Buscar de nuevo.");
             return;
           }
-          setOriginResults([]);
           setOriginLoading(false);
-          setOriginError(e instanceof Error ? e.message : "Error al buscar. Reintenta.");
+          setOriginError(e instanceof Error ? e.message : "Error al buscar. Buscar de nuevo.");
         })
         .finally(() => clearTimeout(timeoutId));
     }, 320);
@@ -559,6 +732,23 @@ export function HospitalDetailPanel({
                 >
                   <HeartIcon filled={favoritesEnabled && isHospitalFavorited} />
                 </button>
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]",
+                    !hospital || !mapsUrlForHospital(hospital) ? "opacity-50" : "",
+                  )}
+                  aria-label="Abrir en Google Maps"
+                  title="Abrir en Google Maps"
+                  disabled={!hospital || !mapsUrlForHospital(hospital)}
+                  onClick={() => {
+                    const url = mapsUrlForHospital(hospital);
+                    if (!url) return;
+                    window.open(url, "_blank", "noopener,noreferrer");
+                  }}
+                >
+                  <MapIcon />
+                </button>
                 <div className="relative" ref={shareMenuRef}>
                   <button
                     type="button"
@@ -578,26 +768,9 @@ export function HospitalDetailPanel({
                     <div className="absolute right-0 top-[calc(100%+10px)] z-[3600] w-[280px] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white shadow-[var(--shadow-soft)]">
                       <div className="px-4 py-3">
                         <div className="text-sm font-semibold text-[var(--title)]">Compartir plaza</div>
-                        <div className="mt-0.5 text-xs font-medium text-[var(--label)]">
-                          Envía el enlace con nombre y ubicación.
-                        </div>
                       </div>
                       <div className="border-t border-[var(--border)] p-2">
                         <div className="grid gap-2">
-                          <button
-                            type="button"
-                            className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-left hover:bg-black/[0.04]"
-                            onClick={() => {
-                              if (!shareUrl) return;
-                              const text = `Plaza SERUMS: ${fullName || "Establecimiento"} — ${fullLocation || "Ubicación"} ${shareUrl}`;
-                              window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
-                              setShareOpen(false);
-                            }}
-                          >
-                            <div className="text-sm font-semibold text-[var(--title)]">WhatsApp</div>
-                            <div className="text-xs font-medium text-[var(--label)]">Enviar mensaje</div>
-                          </button>
-
                           <button
                             type="button"
                             className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-left hover:bg-black/[0.04]"
@@ -613,8 +786,26 @@ export function HospitalDetailPanel({
                               window.setTimeout(() => setShareToast(null), 1600);
                             }}
                           >
-                            <div className="text-sm font-semibold text-[var(--title)]">Copiar enlace</div>
-                            <div className="text-xs font-medium text-[var(--label)]">Deep link</div>
+                            <div className="flex items-center gap-3">
+                              <CopyIcon />
+                              <div className="text-sm font-semibold text-[var(--title)]">Copiar enlace</div>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-left hover:bg-black/[0.04]"
+                            onClick={() => {
+                              if (!shareUrl) return;
+                              const text = `Plaza SERUMS: ${fullName || "Establecimiento"} — ${fullLocation || "Ubicación"} ${shareUrl}`;
+                              window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+                              setShareOpen(false);
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <WhatsappIcon />
+                              <div className="text-sm font-semibold text-[var(--title)]">WhatsApp</div>
+                            </div>
                           </button>
 
                           <button
@@ -630,8 +821,10 @@ export function HospitalDetailPanel({
                               setShareOpen(false);
                             }}
                           >
-                            <div className="text-sm font-semibold text-[var(--title)]">Facebook</div>
-                            <div className="text-xs font-medium text-[var(--label)]">Compartir enlace</div>
+                            <div className="flex items-center gap-3">
+                              <FacebookIcon />
+                              <div className="text-sm font-semibold text-[var(--title)]">Facebook</div>
+                            </div>
                           </button>
 
                           <button
@@ -648,8 +841,10 @@ export function HospitalDetailPanel({
                               setShareOpen(false);
                             }}
                           >
-                            <div className="text-sm font-semibold text-[var(--title)]">Twitter/X</div>
-                            <div className="text-xs font-medium text-[var(--label)]">Publicar</div>
+                            <div className="flex items-center gap-3">
+                              <TwitterIcon />
+                              <div className="text-sm font-semibold text-[var(--title)]">Twitter/X</div>
+                            </div>
                           </button>
                         </div>
                       </div>
@@ -735,7 +930,37 @@ export function HospitalDetailPanel({
                         <InfoRow label="Profesión requerida" value={profesion} />
                         <InfoRow label="Institución" value={hospital.institucion || "—"} />
                         <InfoRow label="GD" value={hospital.grado_dificultad || "—"} />
+                        <InfoRow label="ZAF" value={hospital.zaf === "SI" ? "Sí" : "No"} />
+                        <InfoRow label="ZE" value={hospital.ze === "SI" ? "Sí" : "No"} />
                         <InfoRow label="Plazas SERUMS disponibles" value={plazasSummary} />
+                      </div>
+                    </div>
+
+                    <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
+                      <div className="text-sm font-semibold text-[var(--title)]">Comentarios (privado)</div>
+                      <div className="mt-2">
+                        <textarea
+                          value={comment}
+                          onChange={(e) => onChangeComment?.(e.target.value)}
+                          placeholder={commentEnabled ? "Escribe tu comentario..." : "Inicia sesión para guardar comentarios."}
+                          disabled={!commentEnabled || commentLoading}
+                          className="min-h-[110px] w-full resize-none rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 py-3 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5 disabled:opacity-60"
+                        />
+                      </div>
+                      <div className="mt-2 grid gap-2">
+                        {commentError ? (
+                          <div className="rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-2 text-xs font-semibold text-[var(--title)]">
+                            {commentError}
+                          </div>
+                        ) : null}
+                        <Button
+                          variant="secondary"
+                          className="w-full"
+                          onClick={() => onSaveComment?.()}
+                          disabled={!commentEnabled || commentLoading || commentSaving || !onSaveComment}
+                        >
+                          {commentSaving ? "Guardando…" : "Guardar comentario"}
+                        </Button>
                       </div>
                     </div>
 
@@ -844,11 +1069,10 @@ export function HospitalDetailPanel({
                       <div className="mt-3 flex flex-wrap gap-2">
                         {[
                           { key: "Hospedaje", label: "Hospedaje", enabled: nearby ? nearby.hospedajes.length > 0 : false },
-                          { key: "Restaurante/Chifa", label: "Restaurante/Chifa", enabled: nearby ? nearby.restaurantes.length > 0 : false },
-                          { key: "Centro Comercial", label: "Centro Comercial", enabled: nearby ? nearby.centros_comerciales.length > 0 : false },
+                          { key: "Restaurante/Chifa", label: "Restaurante", enabled: nearby ? nearby.restaurantes.length > 0 : false },
                           { key: "Supermercado", label: "Supermercado", enabled: nearby ? nearby.supermercados.length > 0 : false },
                           { key: "Farmacia", label: "Farmacia", enabled: nearby ? nearby.farmacias.length > 0 : false },
-                          { key: "Tambo/Bodega", label: "Tambo/Bodega", enabled: nearby ? nearby.tiendas.length > 0 : false },
+                          { key: "Tambo/Bodega", label: "Bodega", enabled: nearby ? nearby.tiendas.length > 0 : false },
                           { key: "Banco/Cajero", label: "Banco/Cajero", enabled: nearby ? nearby.bancos.length > 0 : false },
                           { key: "Comisaría", label: "Comisaría", enabled: nearby ? nearby.comisarias.length > 0 : false },
                           { key: "Gimnasio", label: "Gimnasio", enabled: nearby ? nearby.gimnasios.length > 0 : false },
@@ -993,204 +1217,129 @@ export function HospitalDetailPanel({
                 ) : (
                   <div className="grid gap-3">
                     <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                      <div className="text-sm font-semibold text-[var(--title)]">Modo</div>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        {(["carro", "avion"] as const).map((m) => (
-                          <button
-                            key={m}
-                            type="button"
-                            className={cn(
-                              "flex h-10 items-center justify-center gap-2 rounded-full border text-sm font-medium transition-colors",
-                              travelMode === m
-                                ? "border-black/10 bg-black/[0.04] text-[var(--title)]"
-                                : "border-[var(--border)] bg-white text-[var(--label)] hover:bg-black/[0.03]",
-                            )}
-                            onClick={() => onChangeTravelMode(m)}
-                          >
-                            <TravelIcon mode={m} />
-                            {m === "carro" ? "Carro" : "Avión"}
-                          </button>
-                        ))}
+                      <div className="text-sm font-semibold text-[var(--title)]">Origen</div>
+                      <div className="mt-1 text-xs font-medium text-[var(--label)]">
+                        {routeOrigin.type === "user" ? "Mi ubicación actual" : routeOrigin.label}
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        <button
+                          type="button"
+                          className={cn(
+                            "h-10 rounded-full border text-sm font-medium transition-colors",
+                            routeOrigin.type === "user"
+                              ? "border-black/10 bg-black/[0.04] text-[var(--title)]"
+                              : "border-[var(--border)] bg-white text-[var(--label)] hover:bg-black/[0.03]",
+                          )}
+                          onClick={() => onChangeRouteOrigin({ type: "user" })}
+                        >
+                          Mi ubicación
+                        </button>
+
+                        <div className="relative">
+                          <input
+                            value={originQuery}
+                            onChange={(e) => setOriginQuery(e.target.value)}
+                            placeholder="Buscar origen (terrapuerto, ciudad...)"
+                            className="h-10 w-full rounded-2xl border border-[var(--border)] bg-white px-4 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none ring-0 placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5"
+                          />
+
+                          {originLoading || originError || originResults.length > 0 ? (
+                            <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-[3600] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white shadow-[var(--shadow-soft)]">
+                              {originLoading ? (
+                                <div className="px-4 py-3 text-sm font-medium text-[var(--label)]">Buscando…</div>
+                              ) : originError ? (
+                                <div className="px-4 py-3 text-sm font-medium text-[var(--title)]">{originError}</div>
+                              ) : (
+                                <div className="max-h-[240px] overflow-auto">
+                                  {originResults.slice(0, 8).map((r) => (
+                                    <button
+                                      key={r.place_id}
+                                      type="button"
+                                      className="w-full px-4 py-3 text-left text-sm font-medium text-[var(--title)] hover:bg-black/[0.03]"
+                                      onMouseDown={(e) => e.preventDefault()}
+                                      onClick={() => {
+                                        const lat = Number(r.lat);
+                                        const lng = Number(r.lon);
+                                        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+                                        onChangeRouteOrigin({
+                                          type: "custom",
+                                          label: r.display_name,
+                                          lat,
+                                          lng,
+                                        });
+                                        setOriginQuery(r.display_name);
+                                        setOriginResults([]);
+                                      }}
+                                    >
+                                      <div className="line-clamp-2">{r.display_name}</div>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="mt-3 text-xs font-medium text-[var(--label)]">
                         Tiempo estimado sin considerar tráfico ni paradas.
                       </div>
                     </div>
 
-                    {travelMode === "carro" ? (
-                      <>
-                        <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                          <div className="text-sm font-semibold text-[var(--title)]">Origen (carro)</div>
-                          <div className="mt-1 text-xs font-medium text-[var(--label)]">
-                            {routeOrigin.type === "user"
-                              ? "Mi ubicación actual"
-                              : routeOrigin.type === "airport"
-                                ? `Aeropuerto: ${routeOrigin.label}`
-                                : routeOrigin.label}
-                          </div>
-                          <div className="mt-3 grid gap-2">
-                            <div className="grid grid-cols-2 gap-2">
-                              <button
-                                type="button"
-                                className={cn(
-                                  "h-10 rounded-full border text-sm font-medium transition-colors",
-                                  routeOrigin.type === "user"
-                                    ? "border-black/10 bg-black/[0.04] text-[var(--title)]"
-                                    : "border-[var(--border)] bg-white text-[var(--label)] hover:bg-black/[0.03]",
-                                )}
-                                onClick={() => onChangeRouteOrigin({ type: "user" })}
-                              >
-                                Mi ubicación
-                              </button>
-                              <button
-                                type="button"
-                                className={cn(
-                                  "h-10 rounded-full border text-sm font-medium transition-colors",
-                                  routeOrigin.type === "airport"
-                                    ? "border-black/10 bg-black/[0.04] text-[var(--title)]"
-                                    : "border-[var(--border)] bg-white text-[var(--label)] hover:bg-black/[0.03]",
-                                )}
-                                onClick={() => {
-                                  if (onUseNearestAirportAsOrigin) onUseNearestAirportAsOrigin();
-                                }}
-                                disabled={!onUseNearestAirportAsOrigin}
-                              >
-                                Aeropuerto
-                              </button>
-                            </div>
-
-                            <div className="relative">
-                              <input
-                                value={originQuery}
-                                onChange={(e) => setOriginQuery(e.target.value)}
-                                placeholder="Buscar origen (aeropuerto, terrapuerto, ciudad...)"
-                                className="h-10 w-full rounded-2xl border border-[var(--border)] bg-white px-4 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none ring-0 placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5"
-                              />
-
-                              {originLoading || originError || originResults.length > 0 ? (
-                                <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-[3600] overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white shadow-[var(--shadow-soft)]">
-                                  {originLoading ? (
-                                    <div className="px-4 py-3 text-sm font-medium text-[var(--label)]">Buscando…</div>
-                                  ) : originError ? (
-                                    <div className="px-4 py-3 text-sm font-medium text-[var(--title)]">{originError}</div>
-                                  ) : (
-                                    <div className="max-h-[240px] overflow-auto">
-                                      {originResults.slice(0, 8).map((r) => (
-                                        <button
-                                          key={r.place_id}
-                                          type="button"
-                                          className="w-full px-4 py-3 text-left text-sm font-medium text-[var(--title)] hover:bg-black/[0.03]"
-                                          onMouseDown={(e) => e.preventDefault()}
-                                          onClick={() => {
-                                            const lat = Number(r.lat);
-                                            const lng = Number(r.lon);
-                                            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-                                            onChangeRouteOrigin({
-                                              type: "custom",
-                                              label: r.display_name,
-                                              lat,
-                                              lng,
-                                            });
-                                            setOriginQuery(r.display_name);
-                                            setOriginResults([]);
-                                          }}
-                                        >
-                                          <div className="line-clamp-2">{r.display_name}</div>
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-
-                        {route ? (
-                          <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                            <div className="text-sm font-semibold text-[var(--title)]">Ruta en carro</div>
-                            <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
-                              <div className="text-sm font-semibold text-[var(--title)]">
-                                {formatDistance(route.distancia)} · {formatDuration(route.duracion)}
-                              </div>
-                              <div className="mt-1 text-xs font-medium text-[var(--label)]">
-                                {formatDuration(route.duracion)} en carro (sin tráfico)
-                              </div>
-                            </div>
-                            {route.duracion > 4 * 60 * 60 ? (
-                              <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-sm font-semibold text-[var(--title)]">
-                                {route.duracion > 12 * 60 * 60
-                                  ? "Viaje de +12h. Considera hacer paradas de descanso."
-                                  : "Viaje de +4h. Considera hacer paradas de descanso."}
-                              </div>
-                            ) : null}
+                    {route ? (
+                      <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
+                        <div className="text-sm font-semibold text-[var(--title)]">Ruta</div>
+                        {route.aproximada ? (
+                          <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-xs font-semibold text-[var(--title)]">
+                            {route.warning || "Ruta aproximada."}
                           </div>
                         ) : null}
-                      </>
-                    ) : (
-                      <>
-                        <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                          <div className="text-xs font-semibold text-[var(--label)]">Tramo 1</div>
-                          <div className="mt-1 text-sm font-semibold text-[var(--title)]">
-                            Vuelo hasta {nearestAirport ? nearestAirport.name || "aeropuerto" : "el aeropuerto más cercano"}
+                        <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
+                          <div className="text-sm font-semibold text-[var(--title)]">
+                            {formatDistance(route.distancia)} · {formatDuration(route.duracion)}
                           </div>
-                          <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
-                            <div className="text-xs font-medium text-[var(--label)]">Aeropuerto</div>
-                            <div className="mt-0.5 text-sm font-medium text-[var(--title)]">
-                              {nearestAirport ? nearestAirport.name || "Aeropuerto" : airportLoading ? "Buscando…" : "Aeropuerto más cercano"}
-                            </div>
-                            {nearestAirportDistanceMeters != null ? (
-                              <div className="mt-1 text-xs font-medium text-[var(--label)]">
-                                Aeropuerto → establecimiento: {formatDistance(nearestAirportDistanceMeters)}
-                              </div>
-                            ) : null}
-                            {!nearestAirport && !airportLoading && !airportError ? (
-                              <div className="mt-2 text-xs font-medium text-[var(--label)]">No encontramos un aeropuerto a menos de 250 km.</div>
-                            ) : null}
-                          </div>
+                          <div className="mt-1 text-xs font-medium text-[var(--label)]">{formatDuration(route.duracion)} en carro (sin tráfico)</div>
                         </div>
-
-                        <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                          <div className="text-xs font-semibold text-[var(--label)]">Tramo 2</div>
-                          <div className="mt-1 text-sm font-semibold text-[var(--title)]">Desde aeropuerto</div>
-                          <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3">
-                            <div className="text-xs font-medium text-[var(--label)]">Ruta terrestre</div>
-                            <div className="mt-0.5 text-sm font-semibold text-[var(--title)]">
-                              {airportDriveRoute
-                                ? `Desde aeropuerto: ${formatDistance(airportDriveRoute.distancia)} · ${formatDuration(airportDriveRoute.duracion)} en carro hasta el establecimiento`
-                                : airportLoading
-                                  ? "Calculando…"
-                                  : "—"}
-                            </div>
-                            {airportDriveRoute ? (
-                              <div className="mt-1 text-xs font-medium text-[var(--label)]">
-                                {formatDuration(airportDriveRoute.duracion)} en carro (sin tráfico)
-                              </div>
-                            ) : null}
-                            {airportDriveRoute && airportDriveRoute.duracion > 4 * 60 * 60 ? (
-                              <div className="mt-2 rounded-[var(--radius-card)] bg-white px-3 py-3 text-sm font-semibold text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                                {airportDriveRoute.duracion > 12 * 60 * 60
-                                  ? "Viaje de +12h. Considera hacer paradas de descanso."
-                                  : "Viaje de +4h. Considera hacer paradas de descanso."}
-                              </div>
-                            ) : null}
+                        {route.duracion > 4 * 60 * 60 ? (
+                          <div className="mt-2 rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-3 text-sm font-semibold text-[var(--title)]">
+                            {route.duracion > 12 * 60 * 60
+                              ? "Viaje de +12h. Considera hacer paradas de descanso."
+                              : "Viaje de +4h. Considera hacer paradas de descanso."}
                           </div>
-                        </div>
-                      </>
-                    )}
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     <div className="grid gap-2">
                       <Button
                         variant="primary"
                         className="w-full"
                         onClick={onRequestRoute}
-                        disabled={!onRequestRoute || routeLoading || airportLoading}
+                        disabled={!onRequestRoute || routeLoading}
                       >
-                        {routeLoading || airportLoading ? "Calculando…" : routeError || airportError ? "Reintentar" : "Mostrar ruta en el mapa"}
+                        {routeLoading ? "Calculando…" : routeError ? "Reintentar" : "Mostrar ruta en el mapa"}
                       </Button>
-                      {airportError || routeError ? (
+                      <Button
+                        variant="secondary"
+                        className="w-full"
+                        onClick={() => {
+                          const origin =
+                            routeOrigin.type === "user"
+                              ? null
+                              : routeOrigin.type === "custom"
+                                ? { lat: routeOrigin.lat, lng: routeOrigin.lng }
+                                : { lat: routeOrigin.lat, lng: routeOrigin.lng };
+                          const dest = hospital ? { lat: hospital.lat, lng: hospital.lng } : null;
+                          const url = directionsUrl(origin, dest);
+                          if (!url) return;
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        }}
+                        disabled={!hospital}
+                      >
+                        Abrir ruta en Google Maps
+                      </Button>
+                      {routeError ? (
                         <div className="rounded-[var(--radius-panel)] bg-black/[0.02] px-4 py-3 text-sm font-medium text-[var(--title)]">
-                          {airportError || routeError}
+                          {routeError}
                         </div>
                       ) : null}
                     </div>

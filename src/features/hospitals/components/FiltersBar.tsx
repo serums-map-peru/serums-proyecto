@@ -179,6 +179,37 @@ function normalizeInstitution(value: string) {
     .trim();
 }
 
+function normalizeDepartamentoKey(value: string) {
+  return String(value || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function preferredDepartamentoLabel(key: string) {
+  const k = normalizeDepartamentoKey(key);
+  if (k === "ANCASH") return "Áncash";
+  if (k === "APURIMAC") return "Apurímac";
+  if (k === "HUANUCO") return "Huánuco";
+  if (k === "JUNIN") return "Junín";
+  if (k === "SAN MARTIN") return "San Martín";
+  return "";
+}
+
+function institutionOrderRank(institucion: string) {
+  const v = normalizeInstitution(institucion);
+  if (v.includes("essalud")) return 0;
+  if (v.includes("minsa")) return 1;
+  if (v.includes("marina")) return 2;
+  if (v.includes("policia")) return 3;
+  if (v.includes("ejercito")) return 4;
+  if (v.includes("fuerza aerea") || v.includes("aerea del peru") || v.includes("fap")) return 5;
+  return 6;
+}
+
 function abbreviateInstitutionForFilter(value: string) {
   const full = String(value || "").trim();
   const n = normalizeInstitution(full);
@@ -235,14 +266,24 @@ export function FiltersBar({
   }, [options, results]);
   const instValues = React.useMemo(() => {
     if (Array.isArray(options?.instituciones?.values) && options.instituciones.values.length > 0) {
-      return options.instituciones.values;
+      return options.instituciones.values.slice().sort((a, b) => {
+        const ra = institutionOrderRank(a);
+        const rb = institutionOrderRank(b);
+        if (ra !== rb) return ra - rb;
+        return a.localeCompare(b);
+      });
     }
     const set = new Set<string>();
     for (const h of results) {
       const v = String(h?.institucion || "").trim();
       if (v) set.add(v);
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return Array.from(set).sort((a, b) => {
+      const ra = institutionOrderRank(a);
+      const rb = institutionOrderRank(b);
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b);
+    });
   }, [options, results]);
 
   const professionSuggestions = React.useMemo(() => {
@@ -262,11 +303,35 @@ export function FiltersBar({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [results]);
 
+  const deptGroups = React.useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; variants: string[]; enabled: boolean }>();
+    const enabledMap = options?.departamentos?.enabled || {};
+
+    for (const raw of deptValues) {
+      const key = normalizeDepartamentoKey(raw);
+      if (!key) continue;
+      const enabled = enabledMap[raw] ?? true;
+      const existing = groups.get(key);
+      if (existing) {
+        if (!existing.variants.includes(raw)) existing.variants.push(raw);
+        existing.enabled = existing.enabled || enabled;
+        continue;
+      }
+      const preferred = preferredDepartamentoLabel(key);
+      const label = preferred || toTitleCase(raw);
+      groups.set(key, { key, label, variants: [raw], enabled });
+    }
+
+    const out = Array.from(groups.values());
+    out.sort((a, b) => a.label.localeCompare(b.label, "es-PE"));
+    return out;
+  }, [deptValues, options?.departamentos?.enabled]);
+
   const filteredDeptValues = React.useMemo(() => {
     const q = departmentSearch.trim().toLowerCase();
-    if (!q) return deptValues;
-    return deptValues.filter((d) => d.toLowerCase().includes(q));
-  }, [departmentSearch, deptValues]);
+    if (!q) return deptGroups;
+    return deptGroups.filter((d) => d.label.toLowerCase().includes(q));
+  }, [departmentSearch, deptGroups]);
 
   const [selectedDepartamentos, setSelectedDepartamentos] = React.useState<string[]>(
     Array.isArray(filters.departamento) ? filters.departamento : [],
@@ -287,6 +352,10 @@ export function FiltersBar({
   const [selectedAirportDistance, setSelectedAirportDistance] = React.useState<string[]>(
     [],
   );
+
+  const selectedDepartamentoKeys = React.useMemo(() => {
+    return new Set(selectedDepartamentos.map(normalizeDepartamentoKey));
+  }, [selectedDepartamentos]);
 
   React.useEffect(() => {
     const next = Array.isArray(filters.departamento) ? filters.departamento : [];
@@ -392,23 +461,10 @@ export function FiltersBar({
             <div className="grid gap-3 px-2 py-2">
               <div className="grid gap-0.5">
                 <SectionTitle>SERUMS</SectionTitle>
-                <div className="text-xs font-medium text-[var(--label)]">Modalidad y proceso</div>
+                <div className="text-xs font-medium text-[var(--label)]">Modalidad</div>
               </div>
 
-              <div className="grid gap-1">
-                <div className="text-xs font-medium text-[var(--label)]">Proceso</div>
-                {[
-                  { label: "2025-1", value: "2025-I" },
-                  { label: "2025-2", value: "2025-II" },
-                ].map((p) => (
-                  <AppleCheckbox
-                    key={p.value}
-                    label={p.label}
-                    checked={filters.serums_periodo === p.value}
-                    onChange={() => setFilters((prev) => ({ ...prev, serums_periodo: prev.serums_periodo === p.value ? null : p.value }))}
-                  />
-                ))}
-              </div>
+
 
               <div className="grid gap-1">
                 <div className="text-xs font-medium text-[var(--label)]">Modalidad</div>
@@ -458,27 +514,40 @@ export function FiltersBar({
                     placeholder="Escribe para buscar departamento..."
                     className="h-9 w-full rounded-2xl border border-[var(--border)] bg-white px-3 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none focus:ring-2 focus:ring-black/5"
                   />
-                  {filteredDeptValues.map((d) => {
-                    const checked = selectedDepartamentos.includes(d);
-                    const enabled = options.departamentos.enabled[d] ?? true;
-                    return (
-                      <AppleCheckbox
-                        key={d}
-                        label={d}
-                        checked={checked}
-                        disabled={!enabled}
-                        onChange={() => {
-                          const next = toggleMulti(selectedDepartamentosRef.current, d);
-                          selectedDepartamentosRef.current = next;
-                          setSelectedDepartamentos(next);
-                          setFilters((prev) => ({
-                            ...prev,
-                            departamento: next,
-                          }));
-                        }}
-                      />
-                    );
-                  })}
+                  <div className="grid max-h-[260px] gap-1 overflow-auto pr-1">
+                    {filteredDeptValues.map((g) => {
+                      const checked = selectedDepartamentoKeys.has(g.key);
+                      const enabled = g.enabled;
+                      return (
+                        <AppleCheckbox
+                          key={g.key}
+                          label={g.label}
+                          checked={checked}
+                          disabled={!enabled}
+                          onChange={() => {
+                            const prev = selectedDepartamentosRef.current;
+                            let next: string[];
+                            if (checked) {
+                              next = prev.filter((v) => normalizeDepartamentoKey(v) !== g.key);
+                            } else {
+                              const set = new Set(prev);
+                              for (const v of g.variants) set.add(v);
+                              set.add(g.key);
+                              const pref = preferredDepartamentoLabel(g.key);
+                              if (pref) {
+                                set.add(pref);
+                                set.add(pref.toUpperCase());
+                              }
+                              next = Array.from(set);
+                            }
+                            selectedDepartamentosRef.current = next;
+                            setSelectedDepartamentos(next);
+                            setFilters((p) => ({ ...p, departamento: next }));
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
