@@ -163,10 +163,20 @@ export function useHospitalFiltering() {
 
     Promise.allSettled([pHospitals, pFacets])
       .then((results) => {
+        const isAbort = (e: unknown) => {
+          if (!e) return false;
+          if (typeof e === "object" && "name" in e && e.name === "AbortError") return true;
+          if (typeof e === "object" && "message" in e && typeof e.message === "string") {
+            const m = e.message.toLowerCase();
+            if (m.includes("abort")) return true;
+          }
+          return false;
+        };
+
         const errors = results
           .filter((r) => r.status === "rejected")
           .map((r) => (r.status === "rejected" ? r.reason : null))
-          .filter(Boolean);
+          .filter((e) => !!e && !isAbort(e));
         if (errors.length > 0) {
           const first = errors[0];
           setError(first instanceof Error ? first.message : "Error al filtrar establecimientos");
