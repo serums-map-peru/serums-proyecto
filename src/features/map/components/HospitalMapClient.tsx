@@ -4,6 +4,7 @@ import * as React from "react";
 import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 
 import { HospitalMapItem, NearbyPlacesResponse, RouteResponse } from "@/features/hospitals/types";
+import { Button } from "@/shared/ui/Button";
 
 import "leaflet.markercluster";
 
@@ -487,6 +488,8 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
   nearbyLoading = false,
   focus,
 }: HospitalMapProps) {
+  const mapRef = React.useRef<L.Map | null>(null);
+
   const routeLatLngs = React.useMemo(() => {
     if (route?.aproximada) return null;
     const coords = route?.geometria?.coordinates;
@@ -515,6 +518,18 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
       : null;
 
   const placeMarkersRef = React.useRef<Map<string, L.Marker>>(new Map());
+
+  const fitAllHospitals = React.useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const latLngs = hospitals
+      .map((h) => ({ lat: Number(h.lat), lng: Number(h.lng) }))
+      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+      .map((p) => L.latLng(p.lat, p.lng));
+    if (latLngs.length === 0) return;
+    const bounds = L.latLngBounds(latLngs);
+    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 12, animate: true });
+  }, [hospitals]);
 
   const InvalidateSizeController = () => {
     const map = useMap();
@@ -557,6 +572,17 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
     return null;
   };
 
+  const MapRefController = () => {
+    const map = useMap();
+    React.useEffect(() => {
+      mapRef.current = map;
+      return () => {
+        mapRef.current = null;
+      };
+    }, [map]);
+    return null;
+  };
+
   const MapEffects = ({ focusNearbyId }: { focusNearbyId: string | null }) => {
     const map = useMap();
     React.useEffect(() => {
@@ -582,6 +608,17 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           Precisión aprox: {formatAccuracy(accuracyMeters)}
         </div>
       ) : null}
+      <div className="absolute bottom-4 left-4 z-[1200]">
+        <Button
+          size="sm"
+          variant="secondary"
+          className="rounded-full border border-[var(--border)] bg-white/95 px-4 shadow-sm backdrop-blur"
+          onClick={fitAllHospitals}
+          disabled={loading || hospitals.length === 0}
+        >
+          Ver todo
+        </Button>
+      </div>
       <MapContainer
         center={[-9.19, -75.0152]}
         zoom={5}
@@ -598,6 +635,7 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           keepBuffer={3}
         />
 
+        <MapRefController />
         <InvalidateSizeController />
         <FocusController focus={focus} />
         <RouteFitController routeLatLngs={routeLatLngs} />

@@ -74,11 +74,11 @@ async function listOfferSummaryByHospitalIds(hospitalIds, { periodo, modalidad, 
   const params = [...ids];
 
   if (periodo) {
-    where.push("periodo = ?");
+    where.push("lower(periodo) = lower(?)");
     params.push(String(periodo));
   }
   if (modalidad) {
-    where.push("modalidad = ?");
+    where.push("lower(modalidad) = lower(?)");
     params.push(String(modalidad));
   }
   if (profesion) {
