@@ -1122,8 +1122,14 @@ async function listHospitals(filters) {
   const serums_modalidad = cleanString(filters.serums_modalidad);
   const airportHoursMax = Number(filters.airport_hours_max);
 
+  const requiresOfferFilter = !!serums_periodo || !!serums_modalidad;
+  const needsOfferFilter = DB_ENABLED && (!!profesion || requiresOfferFilter);
+
   let base = store.records.filter((h) => {
-    if (!matchesAny(h.profesion, profesion ? [profesion] : [])) return false;
+    if (!needsOfferFilter) {
+      const profField = Array.isArray(h.profesiones) && h.profesiones.length > 0 ? h.profesiones : h.profesion;
+      if (!matchesAny(profField, profesion ? [profesion] : [])) return false;
+    }
     if (!matchesAny(h.institucion, instituciones)) return false;
     if (!matchesAny(h.departamento, departamentos)) return false;
     if (!matchesAny(h.provincia, provincias)) return false;
@@ -1162,8 +1168,7 @@ async function listHospitals(filters) {
     base = results;
   }
 
-  const requiresOfferFilter = !!serums_periodo || !!serums_modalidad;
-  if (!requiresOfferFilter) return base;
+  if (!needsOfferFilter) return base;
   if (!DB_ENABLED) return [];
 
   const ids = base.map((h) => String(h.id)).filter(Boolean);
