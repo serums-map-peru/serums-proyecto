@@ -24,6 +24,22 @@ function normalizeKey(value) {
     .replace(/[^a-z0-9]+/g, "");
 }
 
+function normalizeInstitutionKey(value) {
+  return cleanString(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeInstitutionLabel(value) {
+  const raw = cleanString(value);
+  const key = normalizeInstitutionKey(raw);
+  if (key.includes("gobierno regional")) return "MINSA";
+  return raw;
+}
+
 function parseDelimited(text, delimiter) {
   const rows = [];
   let row = [];
@@ -471,7 +487,7 @@ async function main() {
     const profesion = idxProfesion < row.length ? cleanString(row[idxProfesion]) : "";
     const plazas = idxPlazas < row.length ? parseIntOrNull(row[idxPlazas]) : null;
     const codigo = padIpressCode(idxCodigo < row.length ? row[idxCodigo] : "");
-    const institucion = idxInstitucion < row.length ? cleanString(row[idxInstitucion]) : "";
+    const institucion = normalizeInstitutionLabel(idxInstitucion < row.length ? row[idxInstitucion] : "");
     const departamento = idxDepartamento < row.length ? cleanString(row[idxDepartamento]) : "";
     const provincia = idxProvincia < row.length ? cleanString(row[idxProvincia]) : "";
     const distrito = idxDistrito < row.length ? cleanString(row[idxDistrito]) : "";

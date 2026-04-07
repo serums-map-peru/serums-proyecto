@@ -19,6 +19,22 @@ function toNumberOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizeInstitutionKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function normalizeInstitutionLabel(value) {
+  const raw = typeof value === "string" ? value : String(value || "");
+  const key = normalizeInstitutionKey(raw);
+  if (key.includes("gobierno regional")) return "MINSA";
+  return raw.trim();
+}
+
 async function countHospitals() {
   const row = await queryOne("SELECT COUNT(*) as c FROM hospitals");
   const c = row && row.c != null ? Number(row.c) : 0;
@@ -167,7 +183,7 @@ async function listHospitalsWithOverrides() {
       id: String(row.id),
       profesion: row.profesion || "",
       profesiones: Array.isArray(profesiones) ? profesiones : [],
-      institucion: row.institucion || "",
+      institucion: normalizeInstitutionLabel(row.institucion || ""),
       departamento: row.departamento || "",
       provincia: row.provincia || "",
       distrito: row.distrito || "",
@@ -216,7 +232,7 @@ async function getHospitalWithOverridesById(id) {
     id: String(row.id),
     profesion: row.profesion || "",
     profesiones: Array.isArray(profesiones) ? profesiones : [],
-    institucion: row.institucion || "",
+    institucion: normalizeInstitutionLabel(row.institucion || ""),
     departamento: row.departamento || "",
     provincia: row.provincia || "",
     distrito: row.distrito || "",

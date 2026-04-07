@@ -21,6 +21,22 @@ function normalize(value) {
   return cleanString(value).toLowerCase();
 }
 
+function normalizeInstitutionKey(value) {
+  return cleanString(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeInstitutionLabel(value) {
+  const raw = cleanString(value);
+  const key = normalizeInstitutionKey(raw);
+  if (key.includes("gobierno regional")) return "MINSA";
+  return raw;
+}
+
 function parseDelimited(text, delimiter) {
   const rows = [];
   let row = [];
@@ -883,6 +899,7 @@ async function loadHospitalsFromCsv() {
         codigo_renipress_modular: codigo,
         profesiones: profession ? [profession] : [],
       };
+      agg.institucion = normalizeInstitutionLabel(agg.institucion);
 
       const deptCoords = getCoordsForDepartment(record.departamento);
       const renipressBaseCoords =
@@ -918,6 +935,7 @@ async function loadHospitalsFromCsv() {
       if (profession && !agg.profesiones.includes(profession)) {
         agg.profesiones.push(profession);
       }
+      if (normalizeInstitutionLabel(record.institucion) === "MINSA") agg.institucion = "MINSA";
       if (agg.coordenadas_fuente !== "RENIPRESS" && renipress && (renipress.norteRaw || renipress.esteRaw)) {
         const deptCoords = getCoordsForDepartment(agg.departamento || record.departamento);
         const renipressBaseCoords = parseRenipressLatLng(
@@ -992,7 +1010,7 @@ function hospitalToDbRow(h) {
     id: String(h.id),
     profesion: cleanString(h.profesion),
     profesiones_json: JSON.stringify(profesiones),
-    institucion: cleanString(h.institucion),
+    institucion: normalizeInstitutionLabel(h.institucion),
     departamento: cleanString(h.departamento),
     provincia: cleanString(h.provincia),
     distrito: cleanString(h.distrito),
