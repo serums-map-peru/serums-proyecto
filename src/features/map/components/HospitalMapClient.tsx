@@ -4,7 +4,6 @@ import * as React from "react";
 import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 
 import { HospitalMapItem, NearbyPlacesResponse, RouteResponse } from "@/features/hospitals/types";
-import { Button } from "@/shared/ui/Button";
 
 import "leaflet.markercluster";
 
@@ -614,7 +613,7 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
   focus,
 }: HospitalMapProps) {
   const mapRef = React.useRef<L.Map | null>(null);
-  const [renderMode, setRenderMode] = React.useState<"cluster" | "points">("cluster");
+  const lastAutoFitKeyRef = React.useRef<string>("");
 
   const routeLatLngs = React.useMemo(() => {
     if (route?.aproximada) return null;
@@ -644,18 +643,25 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
       : null;
 
   const placeMarkersRef = React.useRef<Map<string, L.Marker>>(new Map());
-
-  const fitAllHospitals = React.useCallback(() => {
+  React.useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    if (focus) return;
+    if (routeLatLngs) return;
+    if (!Array.isArray(hospitals) || hospitals.length === 0) return;
+
+    const key = `${hospitals.length}:${hospitals[0]?.id || ""}:${hospitals[hospitals.length - 1]?.id || ""}`;
+    if (lastAutoFitKeyRef.current === key) return;
+    lastAutoFitKeyRef.current = key;
+
     const latLngs = hospitals
       .map((h) => ({ lat: Number(h.lat), lng: Number(h.lng) }))
       .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
       .map((p) => L.latLng(p.lat, p.lng));
     if (latLngs.length === 0) return;
     const bounds = L.latLngBounds(latLngs);
-    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 12, animate: true });
-  }, [hospitals]);
+    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 7, animate: true });
+  }, [focus, hospitals, routeLatLngs]);
 
   const InvalidateSizeController = () => {
     const map = useMap();
@@ -734,28 +740,6 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           Precisión aprox: {formatAccuracy(accuracyMeters)}
         </div>
       ) : null}
-      <div className="absolute bottom-4 left-4 z-[1200]">
-        <div className="grid gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            className="rounded-full border border-[var(--border)] bg-white/95 px-4 shadow-sm backdrop-blur"
-            onClick={() => setRenderMode((m) => (m === \"cluster\" ? \"points\" : \"cluster\"))}
-            disabled={loading || hospitals.length === 0}
-          >
-            {renderMode === \"cluster\" ? \"Mostrar puntos\" : \"Agrupar\"}
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="rounded-full border border-[var(--border)] bg-white/95 px-4 shadow-sm backdrop-blur"
-            onClick={fitAllHospitals}
-            disabled={loading || hospitals.length === 0}
-          >
-            Ver todo
-          </Button>
-        </div>
-      </div>
       <MapContainer
         center={[-9.19, -75.0152]}
         zoom={5}
@@ -794,19 +778,11 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           <Polyline positions={routeLatLngs} pathOptions={{ color: "#0ea5e9", weight: 5, opacity: 0.9 }} interactive={false} />
         ) : null}
 
-        {renderMode === "cluster" ? (
-          <ClusteredHospitalsLayer
-            hospitals={hospitals}
-            selectedHospitalId={selectedHospitalId}
-            onSelectHospital={onSelectHospital}
-          />
-        ) : (
-          <PointsHospitalsLayer
-            hospitals={hospitals}
-            selectedHospitalId={selectedHospitalId}
-            onSelectHospital={onSelectHospital}
-          />
-        )}
+        <PointsHospitalsLayer
+          hospitals={hospitals}
+          selectedHospitalId={selectedHospitalId}
+          onSelectHospital={onSelectHospital}
+        />
 
         {nearbyPlaces && nearbyPlaces.length > 0
           ? nearbyPlaces.map(({ p, index }) => {
