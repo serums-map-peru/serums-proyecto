@@ -312,6 +312,8 @@ function ClusteredHospitalsLayer({
   const markersByIdRef = React.useRef<Map<string, L.Marker>>(new Map());
   const prevSelectedRef = React.useRef<string | null>(null);
   const onSelectRef = React.useRef(onSelectHospital);
+  const iconCacheRef = React.useRef<Map<string, L.DivIcon>>(new Map());
+  const selectedIconCacheRef = React.useRef<Map<string, L.DivIcon>>(new Map());
   const [clusterReady, setClusterReady] = React.useState(false);
 
   React.useEffect(() => {
@@ -327,10 +329,10 @@ function ClusteredHospitalsLayer({
   React.useEffect(() => {
     const cluster = L.markerClusterGroup({
       chunkedLoading: true,
-      chunkDelay: 30,
-      chunkInterval: 100,
-      animateAddingMarkers: true,
-      animate: true,
+      chunkDelay: 10,
+      chunkInterval: 50,
+      animateAddingMarkers: false,
+      animate: false,
       removeOutsideVisibleBounds: true,
       showCoverageOnHover: false,
       zoomToBoundsOnClick: true,
@@ -351,6 +353,8 @@ function ClusteredHospitalsLayer({
       },
     });
     const markersById = markersByIdRef.current;
+    const iconCache = iconCacheRef.current;
+    const selectedCache = selectedIconCacheRef.current;
     clusterRef.current = cluster;
     map.addLayer(cluster);
     setClusterReady(true);
@@ -360,6 +364,8 @@ function ClusteredHospitalsLayer({
       cluster.clearLayers();
       clusterRef.current = null;
       markersById.clear();
+      iconCache.clear();
+      selectedCache.clear();
       setClusterReady(false);
     };
   }, [map]);
@@ -372,17 +378,38 @@ function ClusteredHospitalsLayer({
     (h: HospitalMapItem, selected: boolean) => {
       const base = resolveSize();
       const size = Math.round(base * categoriaScale(h.categoria));
-      const showLabel = resolveShowLabel(selected);
-      return createMedicalPinDivIcon({
+
+      if (!selected) {
+        const key = `${institucionGroup(h.institucion)}:${size}`;
+        const cached = iconCacheRef.current.get(key);
+        if (cached) return cached;
+        const icon = createMedicalPinDivIcon({
+          institucion: h.institucion,
+          categoria: h.categoria,
+          label: "",
+          size,
+          selected: false,
+          showLabel: false,
+        });
+        iconCacheRef.current.set(key, icon);
+        return icon;
+      }
+
+      const selectedKey = String(h.id);
+      const cachedSelected = selectedIconCacheRef.current.get(selectedKey);
+      if (cachedSelected) return cachedSelected;
+      const icon = createMedicalPinDivIcon({
         institucion: h.institucion,
         categoria: h.categoria,
         label: toTitleCase(h.nombre_establecimiento),
         size,
-        selected,
-        showLabel,
+        selected: true,
+        showLabel: true,
       });
+      selectedIconCacheRef.current.set(selectedKey, icon);
+      return icon;
     },
-    [resolveShowLabel, resolveSize],
+    [resolveSize],
   );
 
   const buildPopupHtml = React.useCallback((h: HospitalMapItem) => {
@@ -471,131 +498,6 @@ function ClusteredHospitalsLayer({
   return null;
 }
 
-function PointsHospitalsLayer({
-  hospitals,
-  selectedHospitalId,
-  onSelectHospital,
-}: {
-  hospitals: HospitalMapItem[];
-  selectedHospitalId: string | null;
-  onSelectHospital: (hospital: HospitalMapItem) => void;
-}) {
-  const map = useMap();
-  const layerRef = React.useRef<L.LayerGroup | null>(null);
-  const rendererRef = React.useRef<L.Renderer | null>(null);
-  const circlesByIdRef = React.useRef<Map<string, L.CircleMarker>>(new Map());
-  const prevSelectedRef = React.useRef<string | null>(null);
-  const onSelectRef = React.useRef(onSelectHospital);
-
-  React.useEffect(() => {
-    onSelectRef.current = onSelectHospital;
-  }, [onSelectHospital]);
-
-  const hospitalsById = React.useMemo(() => {
-    const m = new Map<string, HospitalMapItem>();
-    for (const h of hospitals) m.set(h.id, h);
-    return m;
-  }, [hospitals]);
-
-  React.useEffect(() => {
-    const layer = L.layerGroup();
-    const renderer = L.canvas({ padding: 0.25 });
-    layerRef.current = layer;
-    rendererRef.current = renderer;
-    map.addLayer(layer);
-
-    return () => {
-      map.removeLayer(layer);
-      layer.clearLayers();
-      layerRef.current = null;
-      rendererRef.current = null;
-      circlesByIdRef.current.clear();
-    };
-  }, [map]);
-
-  const circleStyle = React.useCallback((h: HospitalMapItem, selected: boolean) => {
-    const baseRadius = 6;
-    const radius = selected ? Math.round(baseRadius * 1.35) : baseRadius;
-    return {
-      radius,
-      color: selected ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.9)",
-      weight: selected ? 2 : 1,
-      fillColor: institucionGroupColor(h.institucion),
-      fillOpacity: 0.92,
-      opacity: 0.9,
-    };
-  }, []);
-
-  React.useEffect(() => {
-    const layer = layerRef.current;
-    const renderer = rendererRef.current;
-    if (!layer || !renderer) return;
-    if (!map.hasLayer(layer)) return;
-
-    const circlesById = circlesByIdRef.current;
-    const nextIds = new Set(hospitals.map((h) => h.id));
-
-    for (const [id, c] of circlesById) {
-      if (nextIds.has(id)) continue;
-      layer.removeLayer(c);
-      c.off();
-      circlesById.delete(id);
-    }
-
-    for (const h of hospitals) {
-      const existing = circlesById.get(h.id);
-      if (existing) {
-        const ll = existing.getLatLng();
-        if (ll.lat !== h.lat || ll.lng !== h.lng) existing.setLatLng([h.lat, h.lng]);
-        continue;
-      }
-      const circle = L.circleMarker([h.lat, h.lng], {
-        ...circleStyle(h, false),
-        renderer,
-      });
-      circle.on("click", () => onSelectRef.current(h));
-      circlesById.set(h.id, circle);
-      layer.addLayer(circle);
-    }
-
-    if (selectedHospitalId) {
-      const circle = circlesById.get(selectedHospitalId);
-      const hospital = hospitalsById.get(selectedHospitalId);
-      if (circle && hospital) circle.setStyle(circleStyle(hospital, true));
-    }
-
-    if (prevSelectedRef.current && !circlesById.has(prevSelectedRef.current)) {
-      prevSelectedRef.current = null;
-    }
-  }, [circleStyle, hospitals, hospitalsById, selectedHospitalId, map]);
-
-  React.useEffect(() => {
-    const prev = prevSelectedRef.current;
-    const next = selectedHospitalId;
-    if (prev === next) return;
-
-    if (prev) {
-      const prevCircle = circlesByIdRef.current.get(prev);
-      if (prevCircle) {
-        const hospital = hospitalsById.get(prev);
-        if (hospital) prevCircle.setStyle(circleStyle(hospital, false));
-      }
-    }
-
-    if (next) {
-      const nextCircle = circlesByIdRef.current.get(next);
-      if (nextCircle) {
-        const hospital = hospitalsById.get(next);
-        if (hospital) nextCircle.setStyle(circleStyle(hospital, true));
-      }
-    }
-
-    prevSelectedRef.current = next;
-  }, [circleStyle, hospitalsById, selectedHospitalId]);
-
-  return null;
-}
-
 const HospitalMapClient = React.memo(function HospitalMapClient({
   hospitals,
   selectedHospitalId,
@@ -612,8 +514,6 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
   nearbyLoading = false,
   focus,
 }: HospitalMapProps) {
-  const mapRef = React.useRef<L.Map | null>(null);
-  const lastAutoFitKeyRef = React.useRef<string>("");
 
   const routeLatLngs = React.useMemo(() => {
     if (route?.aproximada) return null;
@@ -643,25 +543,6 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
       : null;
 
   const placeMarkersRef = React.useRef<Map<string, L.Marker>>(new Map());
-  React.useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (focus) return;
-    if (routeLatLngs) return;
-    if (!Array.isArray(hospitals) || hospitals.length === 0) return;
-
-    const key = `${hospitals.length}:${hospitals[0]?.id || ""}:${hospitals[hospitals.length - 1]?.id || ""}`;
-    if (lastAutoFitKeyRef.current === key) return;
-    lastAutoFitKeyRef.current = key;
-
-    const latLngs = hospitals
-      .map((h) => ({ lat: Number(h.lat), lng: Number(h.lng) }))
-      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
-      .map((p) => L.latLng(p.lat, p.lng));
-    if (latLngs.length === 0) return;
-    const bounds = L.latLngBounds(latLngs);
-    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 7, animate: true });
-  }, [focus, hospitals, routeLatLngs]);
 
   const InvalidateSizeController = () => {
     const map = useMap();
@@ -704,16 +585,6 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
     return null;
   };
 
-  const MapRefController = () => {
-    const map = useMap();
-    React.useEffect(() => {
-      mapRef.current = map;
-      return () => {
-        mapRef.current = null;
-      };
-    }, [map]);
-    return null;
-  };
 
   const MapEffects = ({ focusNearbyId }: { focusNearbyId: string | null }) => {
     const map = useMap();
@@ -756,7 +627,6 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           keepBuffer={3}
         />
 
-        <MapRefController />
         <InvalidateSizeController />
         <FocusController focus={focus} />
         <RouteFitController routeLatLngs={routeLatLngs} />
@@ -778,7 +648,7 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           <Polyline positions={routeLatLngs} pathOptions={{ color: "#0ea5e9", weight: 5, opacity: 0.9 }} interactive={false} />
         ) : null}
 
-        <PointsHospitalsLayer
+        <ClusteredHospitalsLayer
           hospitals={hospitals}
           selectedHospitalId={selectedHospitalId}
           onSelectHospital={onSelectHospital}

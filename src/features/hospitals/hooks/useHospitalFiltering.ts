@@ -148,46 +148,51 @@ export function useHospitalFiltering() {
     return () => controller.abort();
   }, [apiBase, fetchHospitalsMap, fetchFacets]);
 
+  const filterSeqRef = React.useRef(0);
+
   React.useEffect(() => {
     if (!allHospitals) return;
     const qs = buildHospitalQuery(filters);
     const controller = new AbortController();
+    const seq = (filterSeqRef.current += 1);
+
+    const isAbort = (e: unknown) => {
+      if (!e) return false;
+      if (typeof e === "object" && "name" in e && e.name === "AbortError") return true;
+      if (typeof e === "object" && "message" in e && typeof e.message === "string") {
+        const m = e.message.toLowerCase();
+        if (m.includes("abort")) return true;
+      }
+      return false;
+    };
+
     setLoading(true);
     setError(null);
 
-    const pHospitals = qs
-      ? fetchHospitalsMap(qs, controller.signal).then((data) => setHospitals(data))
-      : Promise.resolve().then(() => setHospitals(allHospitals));
-
-    const pFacets = fetchFacets(qs, controller.signal).then((f) => setOptions(f));
-
-    Promise.allSettled([pHospitals, pFacets])
-      .then((results) => {
-        const isAbort = (e: unknown) => {
-          if (!e) return false;
-          if (typeof e === "object" && "name" in e && e.name === "AbortError") return true;
-          if (typeof e === "object" && "message" in e && typeof e.message === "string") {
-            const m = e.message.toLowerCase();
-            if (m.includes("abort")) return true;
-          }
-          return false;
-        };
-
-        const errors = results
-          .filter((r) => r.status === "rejected")
-          .map((r) => (r.status === "rejected" ? r.reason : null))
-          .filter((e) => !!e && !isAbort(e));
-        if (errors.length > 0) {
-          const first = errors[0];
-          setError(first instanceof Error ? first.message : "Error al filtrar establecimientos");
-        } else {
-          setError(null);
-        }
+    const hospitalsPromise = qs ? fetchHospitalsMap(qs, controller.signal) : Promise.resolve(allHospitals);
+    hospitalsPromise
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        if (filterSeqRef.current !== seq) return;
+        setHospitals(data);
         setLoading(false);
+        setError(null);
       })
-      .catch(() => {
-        setError("Error al filtrar establecimientos");
+      .catch((e) => {
+        if (isAbort(e)) return;
+        if (filterSeqRef.current !== seq) return;
+        setError(e instanceof Error ? e.message : "Error al filtrar establecimientos");
         setLoading(false);
+      });
+
+    fetchFacets(qs, controller.signal)
+      .then((f) => {
+        if (controller.signal.aborted) return;
+        if (filterSeqRef.current !== seq) return;
+        setOptions(f);
+      })
+      .catch((e) => {
+        if (isAbort(e)) return;
       });
 
     return () => controller.abort();
