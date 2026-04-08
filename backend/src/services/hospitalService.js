@@ -3,7 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { HttpError } = require("../utils/httpError");
 const { getEnvNumber, getEnvString } = require("../utils/env");
-const { DB_ENABLED, DB_PATH, queryOne } = require("../db");
+const { DB_ENABLED, DB_DRIVER, DB_PATH, queryOne } = require("../db");
 const hospitalRepository = require("../db/hospitalRepository");
 const serumsOfferRepository = require("../db/serumsOfferRepository");
 const { searchPlacesPe } = require("./nominatimService");
@@ -743,6 +743,18 @@ let dbSeedPromise = null;
 
 async function readDbDataVersion() {
   try {
+    if (DB_DRIVER === "postgres") {
+      const row = await queryOne(`
+        SELECT EXTRACT(EPOCH FROM GREATEST(
+          COALESCE((SELECT MAX(updated_at) FROM hospitals), to_timestamp(0)),
+          COALESCE((SELECT MAX(updated_at) FROM hospital_coord_overrides), to_timestamp(0)),
+          COALESCE((SELECT MAX(updated_at) FROM serums_offers), to_timestamp(0))
+        )) AS v
+      `);
+      const v = row && row.v != null ? Number(row.v) : null;
+      return Number.isFinite(v) ? v : null;
+    }
+
     const row = await queryOne("PRAGMA data_version");
     const v = row && row.data_version != null ? Number(row.data_version) : null;
     return Number.isFinite(v) ? v : null;
