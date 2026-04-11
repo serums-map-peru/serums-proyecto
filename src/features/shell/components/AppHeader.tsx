@@ -226,17 +226,17 @@ export function AppHeader({
             aria-label="Volver al mapa"
             title="Volver al mapa"
           >
-            <div className="flex h-10 items-center gap-2.5">
+            <div className="flex h-10 items-center gap-3">
               <Image
                 src="/Lisa%20personaje.png"
                 alt="LISA"
                 width={64}
                 height={64}
                 priority
-                className="h-9 w-auto object-contain"
+                className="h-9 w-auto origin-left scale-125 object-contain"
               />
               <Image
-                src="/Lisa%20nombre.png"
+                src="/lisanombre.png"
                 alt="LISA"
                 width={220}
                 height={64}
