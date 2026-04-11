@@ -226,7 +226,7 @@ export function AppHeader({
             aria-label="Volver al mapa"
             title="Volver al mapa"
           >
-            <div className="flex h-10 items-center gap-3">
+            <div className="flex h-10 items-center" style={{ gap: "20px" }}>
               <Image
                 src="/Lisa%20personaje.png"
                 alt="LISA"
