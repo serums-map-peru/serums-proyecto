@@ -1,3 +1,4 @@
+const { HttpError } = require("../utils/httpError");
 const { getRoute } = require("../services/osrmService");
 const { getNearbyPlaces, getNearestAirport } = require("../services/overpassService");
 const { searchPlaces } = require("../services/nominatimService");
@@ -40,6 +41,10 @@ async function searchController(req, res, next) {
     const data = await searchPlaces(req.query.q);
     res.json(data);
   } catch (e) {
+    if (e instanceof HttpError) {
+      res.status(200).json({ results: [], warning: e.message });
+      return;
+    }
     next(e);
   }
 }

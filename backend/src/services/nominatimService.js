@@ -1,5 +1,5 @@
 const { HttpError } = require("../utils/httpError");
-const { getEnvNumber } = require("../utils/env");
+const { getEnvNumber, getEnvString } = require("../utils/env");
 
 const NOMINATIM_TIMEOUT_MS = getEnvNumber("NOMINATIM_TIMEOUT_MS", 10_000);
 const SEARCH_CACHE_TTL_MS = getEnvNumber("SEARCH_CACHE_TTL_MS", 10 * 60_000);
@@ -7,6 +7,8 @@ const SEARCH_CACHE_MAX = getEnvNumber("SEARCH_CACHE_MAX", 800);
 const NOMINATIM_RETRY_ON_429 = getEnvNumber("NOMINATIM_RETRY_ON_429", 0) !== 0;
 const NOMINATIM_RETRY_MAX_ATTEMPTS = getEnvNumber("NOMINATIM_RETRY_MAX_ATTEMPTS", 6);
 const NOMINATIM_RETRY_BASE_DELAY_MS = getEnvNumber("NOMINATIM_RETRY_BASE_DELAY_MS", 5_000);
+const NOMINATIM_USER_AGENT = getEnvString("NOMINATIM_USER_AGENT", "localisa.pe");
+const NOMINATIM_REFERER = getEnvString("NOMINATIM_REFERER", "");
 
 const searchCache = new Map();
 
@@ -62,11 +64,15 @@ async function fetchNominatimJson(url) {
     const timeoutId = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
     let res;
     try {
+      const headers = {
+        accept: "application/json",
+        "accept-language": "es,en;q=0.8",
+        "user-agent": NOMINATIM_USER_AGENT,
+      };
+      if (NOMINATIM_REFERER) headers.referer = NOMINATIM_REFERER;
+
       res = await fetch(url, {
-        headers: {
-          accept: "application/json",
-          "user-agent": "SERUMS-Map-Peru/1.0",
-        },
+        headers,
         signal: controller.signal,
       });
     } catch (err) {
