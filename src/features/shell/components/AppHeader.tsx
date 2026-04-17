@@ -226,7 +226,7 @@ export function AppHeader({
             aria-label="Volver al mapa"
             title="Volver al mapa"
           >
-            <div className="flex h-10 items-center" style={{ gap: "20px" }}>
+            <div className="flex h-10 items-center" style={{ gap: "8px" }}>
               <Image
                 src="/Lisa%20personaje.png"
                 alt="LISA"
@@ -236,7 +236,7 @@ export function AppHeader({
                 className="h-9 w-auto origin-left scale-125 object-contain"
               />
               <Image
-                src="/lisanombre.png"
+                src="/lisafinal.png"
                 alt="LISA"
                 width={220}
                 height={64}
