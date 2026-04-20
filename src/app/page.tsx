@@ -1472,7 +1472,7 @@ export default function HomePage() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-10 rounded-full bg-[#0B5FFF] px-4 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(11,95,255,0.28)] hover:brightness-105"
+                    className="h-10 rounded-full !bg-[#0B5FFF] px-4 text-sm font-semibold !text-white shadow-[0_10px_20px_rgba(11,95,255,0.28)] hover:brightness-105"
                     onClick={() => setViewQuery("map")}
                   >
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
@@ -1543,7 +1543,7 @@ export default function HomePage() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      className="rounded-full bg-[#007AFF] px-5 text-white hover:brightness-105"
+                      className="rounded-full !bg-[#007AFF] px-5 !text-white hover:brightness-105"
                       onClick={() => openAuth("login")}
                     >
                       Iniciar sesión
@@ -1697,7 +1697,7 @@ export default function HomePage() {
                               <Button
                                 size="sm"
                                 variant="secondary"
-                                className="h-8 rounded-full bg-[#007AFF] px-4 text-white hover:brightness-105"
+                                className="h-8 rounded-full !bg-[#10B981] px-4 !text-white hover:brightness-105"
                                 onClick={() => saveFavoriteNotes(fav)}
                                 disabled={notesSavingId === fav.id}
                               >

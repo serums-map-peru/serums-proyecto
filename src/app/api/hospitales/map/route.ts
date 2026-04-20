@@ -222,11 +222,10 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const upstream = `${configured}/hospitales/map?${url.searchParams.toString()}`;
     const res = await fetch(upstream, { headers: { accept: "application/json" } }).catch(() => null);
-    if (!res) {
-      return NextResponse.json({ error: { message: "No se pudo conectar al backend.", status: 502 } }, { status: 502 });
+    if (res && res.ok) {
+      const body = await res.json().catch(() => null);
+      return NextResponse.json(body, { status: res.status });
     }
-    const body = await res.json().catch(() => null);
-    return NextResponse.json(body, { status: res.status });
   }
 
   const db = openDb();
