@@ -1681,7 +1681,7 @@ export default function HomePage() {
               </div>
 
               {adminInboxOpen ? (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+                <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/40 px-4 py-6">
                   <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
                     <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
                       <div className="min-w-0">
@@ -2447,7 +2447,7 @@ export default function HomePage() {
 
       {reportOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+          className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/40 px-4 py-6"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setReportOpen(false);
           }}
