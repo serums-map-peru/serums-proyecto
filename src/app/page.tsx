@@ -442,6 +442,12 @@ export default function HomePage() {
     }
   }, [apiBase, extractApiErrorMessage]);
 
+  const extractNotes = React.useCallback((meta: unknown) => {
+    if (!meta || typeof meta !== "object") return "";
+    const m = meta as { notes?: unknown };
+    return typeof m.notes === "string" ? m.notes : "";
+  }, []);
+
   React.useEffect(() => {
     if (!detailOpen) return;
     if (!selectedHospitalId) return;
@@ -486,12 +492,6 @@ export default function HomePage() {
     },
     [apiBase, commentDraftByHospitalId, extractApiErrorMessage, favorites, openAuth, refreshFavorites],
   );
-
-  const extractNotes = React.useCallback((meta: unknown) => {
-    if (!meta || typeof meta !== "object") return "";
-    const m = meta as { notes?: unknown };
-    return typeof m.notes === "string" ? m.notes : "";
-  }, []);
 
   React.useEffect(() => {
     setNotesDraftByFavoriteId((prev) => {
