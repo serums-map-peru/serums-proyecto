@@ -363,6 +363,25 @@ export default function HomePage() {
   const [commentLoadingId] = React.useState<string | null>(null);
   const [commentSavingId, setCommentSavingId] = React.useState<string | null>(null);
   const [commentErrorByHospitalId, setCommentErrorByHospitalId] = React.useState<Record<string, string | null>>({});
+  const [reportCategoryByHospitalId, setReportCategoryByHospitalId] = React.useState<Record<string, string>>({});
+  const [reportMessageByHospitalId, setReportMessageByHospitalId] = React.useState<Record<string, string>>({});
+  const [reportSavingId, setReportSavingId] = React.useState<string | null>(null);
+  const [reportErrorByHospitalId, setReportErrorByHospitalId] = React.useState<Record<string, string | null>>({});
+  const [adminInboxOpen, setAdminInboxOpen] = React.useState(false);
+  const [adminReportsLoading, setAdminReportsLoading] = React.useState(false);
+  const [adminReportsError, setAdminReportsError] = React.useState<string | null>(null);
+  const [adminReports, setAdminReports] = React.useState<
+    Array<{
+      id: string;
+      subject_type: string;
+      subject_id: string;
+      category: string | null;
+      message: string;
+      status: string;
+      created_at: string | null;
+    }>
+  >([]);
+  const [adminReportsDemo, setAdminReportsDemo] = React.useState(false);
 
   const setAuthQuery = React.useCallback((mode: "login" | "register" | null) => {
     if (typeof window === "undefined") return;
@@ -459,6 +478,15 @@ export default function HomePage() {
       const fav = favorites.find((f) => f.item_type === "hospital" && f.item_id === hospitalId);
       return { ...prev, [hospitalId]: extractNotes(fav?.meta) };
     });
+    setReportCategoryByHospitalId((prev) => {
+      if (prev[hospitalId] != null) return prev;
+      return { ...prev, [hospitalId]: "datos" };
+    });
+    setReportMessageByHospitalId((prev) => {
+      if (prev[hospitalId] != null) return prev;
+      return { ...prev, [hospitalId]: "" };
+    });
+    setReportErrorByHospitalId((p) => ({ ...p, [hospitalId]: null }));
   }, [detailOpen, extractNotes, favorites, favoritesEnabled, selectedHospitalId]);
 
   const saveHospitalComment = React.useCallback(
@@ -491,6 +519,87 @@ export default function HomePage() {
       }
     },
     [apiBase, commentDraftByHospitalId, extractApiErrorMessage, favorites, openAuth, refreshFavorites],
+  );
+
+  const submitHospitalReport = React.useCallback(
+    async (hospitalId: string) => {
+      const token = getAuthToken();
+      if (!token) {
+        openAuth("login");
+        return;
+      }
+      const category = reportCategoryByHospitalId[hospitalId] ?? "datos";
+      const message = reportMessageByHospitalId[hospitalId] ?? "";
+      setReportSavingId(hospitalId);
+      setReportErrorByHospitalId((p) => ({ ...p, [hospitalId]: null }));
+      try {
+        const r = await fetch(`${apiBase}/reportes`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ subject_type: "hospital", subject_id: hospitalId, category, message }),
+        });
+        const body = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo enviar el reporte."));
+        setReportMessageByHospitalId((p) => ({ ...p, [hospitalId]: "" }));
+      } catch (e) {
+        setReportErrorByHospitalId((p) => ({
+          ...p,
+          [hospitalId]: e instanceof Error ? e.message : "No se pudo enviar el reporte.",
+        }));
+      } finally {
+        setReportSavingId((cur) => (cur === hospitalId ? null : cur));
+      }
+    },
+    [apiBase, extractApiErrorMessage, openAuth, reportCategoryByHospitalId, reportMessageByHospitalId],
+  );
+
+  const loadAdminReports = React.useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) {
+      openAuth("login");
+      return;
+    }
+    setAdminReportsLoading(true);
+    setAdminReportsError(null);
+    try {
+      const r = await fetch(`${apiBase}/reportes?status=open&limit=200`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo cargar reportes."));
+      const list =
+        body && typeof body === "object" && "reports" in body && Array.isArray((body as { reports?: unknown }).reports)
+          ? ((body as { reports: typeof adminReports }).reports as typeof adminReports)
+          : [];
+      setAdminReports(list);
+    } catch (e) {
+      setAdminReportsError(e instanceof Error ? e.message : "No se pudo cargar reportes.");
+    } finally {
+      setAdminReportsLoading(false);
+    }
+  }, [apiBase, extractApiErrorMessage, openAuth]);
+
+  const closeReport = React.useCallback(
+    async (id: string) => {
+      const token = getAuthToken();
+      if (!token) {
+        openAuth("login");
+        return;
+      }
+      try {
+        const r = await fetch(`${apiBase}/reportes/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "closed" }),
+        });
+        const body = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo cerrar el reporte."));
+        setAdminReports((prev) => prev.filter((x) => x.id !== id));
+      } catch (e) {
+        setAdminReportsError(e instanceof Error ? e.message : "No se pudo cerrar el reporte.");
+      }
+    },
+    [apiBase, extractApiErrorMessage, openAuth],
   );
 
   React.useEffect(() => {
@@ -1483,6 +1592,19 @@ export default function HomePage() {
                     </svg>
                     Actualizar
                   </Button>
+                  {authRole === "admin" ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-10 rounded-full border border-[#E5E5E7] bg-white px-4 text-sm font-semibold text-[#1D1D1F] hover:bg-black/[0.03]"
+                      onClick={() => {
+                        setAdminInboxOpen(true);
+                        void loadAdminReports();
+                      }}
+                    >
+                      Buzón
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -1513,6 +1635,150 @@ export default function HomePage() {
                   </Button>
                 </div>
               </div>
+
+              {adminInboxOpen ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+                  <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+                    <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
+                      <div className="min-w-0">
+                        <div className="text-base font-semibold text-[var(--title)]">Buzón de reportes</div>
+                        <div className="mt-0.5 text-xs font-medium text-[var(--label)]">Visible solo para Admin</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-9 rounded-full border border-[#E5E5E7] bg-white px-4 text-sm font-semibold text-[#1D1D1F] hover:bg-black/[0.03]"
+                          onClick={() => void loadAdminReports()}
+                          disabled={adminReportsLoading}
+                        >
+                          Actualizar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-9 rounded-full border border-[#E5E5E7] bg-white px-4 text-sm font-semibold text-[#1D1D1F] hover:bg-black/[0.03]"
+                          onClick={() => setAdminInboxOpen(false)}
+                        >
+                          Cerrar
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="max-h-[70vh] overflow-auto px-5 py-4">
+                      {adminReportsError ? (
+                        <div className="mb-3 rounded-xl bg-black/[0.03] px-4 py-3 text-sm font-semibold text-[var(--title)]">
+                          {adminReportsError}
+                        </div>
+                      ) : null}
+
+                      {adminReportsLoading ? (
+                        <div className="text-sm font-semibold text-[var(--title)]">Cargando…</div>
+                      ) : adminReports.length === 0 && !adminReportsDemo ? (
+                        <div className="rounded-xl bg-black/[0.02] px-4 py-4">
+                          <div className="text-sm font-semibold text-[var(--title)]">Sin reportes</div>
+                          <div className="mt-1 text-xs font-medium text-[var(--label)]">
+                            Para preview, puedes cargar datos de demo.
+                          </div>
+                          <div className="mt-3">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-9 rounded-full border border-[#E5E5E7] bg-white px-4 text-sm font-semibold text-[#1D1D1F] hover:bg-black/[0.03]"
+                              onClick={() => {
+                                setAdminReportsDemo(true);
+                                setAdminReports([
+                                  {
+                                    id: "demo-1",
+                                    subject_type: "hospital",
+                                    subject_id: "00000001",
+                                    category: "ubicacion",
+                                    message: "La coordenada parece estar en el distrito vecino. Revisar RENIPRESS / geocoding.",
+                                    status: "open",
+                                    created_at: new Date().toISOString(),
+                                  },
+                                  {
+                                    id: "demo-2",
+                                    subject_type: "hospital",
+                                    subject_id: "00000002",
+                                    category: "datos",
+                                    message: "El nombre del establecimiento está desactualizado.",
+                                    status: "open",
+                                    created_at: new Date().toISOString(),
+                                  },
+                                  {
+                                    id: "demo-3",
+                                    subject_type: "hospital",
+                                    subject_id: "00000003",
+                                    category: "bug",
+                                    message: "En móvil, el panel se corta y no deja scrollear.",
+                                    status: "open",
+                                    created_at: new Date().toISOString(),
+                                  },
+                                ]);
+                              }}
+                            >
+                              Cargar demo
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3">
+                          {adminReports.map((r) => (
+                            <div key={r.id} className="rounded-2xl border border-[var(--border)] bg-white px-4 py-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--label)]">
+                                    {r.subject_type} · {r.subject_id}
+                                  </div>
+                                  <div className="mt-1 text-sm font-semibold text-[var(--title)]">
+                                    {r.category ? `Categoría: ${r.category}` : "Sin categoría"}
+                                  </div>
+                                  <div className="mt-2 whitespace-pre-wrap text-sm font-medium text-[var(--title)]">
+                                    {r.message}
+                                  </div>
+                                  {r.created_at ? (
+                                    <div className="mt-2 text-xs font-medium text-[var(--label)]">{r.created_at}</div>
+                                  ) : null}
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-9 rounded-full border border-[var(--border)] px-4 text-sm font-semibold text-[var(--title)] hover:bg-black/[0.03]"
+                                    onClick={() => {
+                                      setAdminInboxOpen(false);
+                                      setViewQuery("map");
+                                      setHospitalQuery(r.subject_id);
+                                      setTimeout(() => setHospitalQuery(r.subject_id), 0);
+                                    }}
+                                  >
+                                    Ver
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-9 rounded-full border border-[var(--border)] px-4 text-sm font-semibold text-[var(--title)] hover:bg-black/[0.03]"
+                                    onClick={() => {
+                                      if (String(r.id).startsWith("demo-")) {
+                                        setAdminReports((prev) => prev.filter((x) => x.id !== r.id));
+                                        return;
+                                      }
+                                      void closeReport(r.id);
+                                    }}
+                                  >
+                                    Cerrar
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-3">
                 <div className="relative">
@@ -2104,6 +2370,23 @@ export default function HomePage() {
         onSaveComment={() => {
           if (!selectedHospitalId) return;
           saveHospitalComment(selectedHospitalId);
+        }}
+        reportEnabled={favoritesEnabled}
+        reportCategory={selectedHospitalId ? (reportCategoryByHospitalId[selectedHospitalId] ?? "datos") : "datos"}
+        reportMessage={selectedHospitalId ? (reportMessageByHospitalId[selectedHospitalId] ?? "") : ""}
+        reportSaving={!!(selectedHospitalId && reportSavingId === selectedHospitalId)}
+        reportError={selectedHospitalId ? (reportErrorByHospitalId[selectedHospitalId] ?? null) : null}
+        onChangeReportCategory={(next) => {
+          if (!selectedHospitalId) return;
+          setReportCategoryByHospitalId((p) => ({ ...p, [selectedHospitalId]: next }));
+        }}
+        onChangeReportMessage={(next) => {
+          if (!selectedHospitalId) return;
+          setReportMessageByHospitalId((p) => ({ ...p, [selectedHospitalId]: next }));
+        }}
+        onSubmitReport={() => {
+          if (!selectedHospitalId) return;
+          submitHospitalReport(selectedHospitalId);
         }}
         isHospitalFavorited={
           !!(selectedHospital && favorites.some((f) => f.item_type === "hospital" && f.item_id === selectedHospital.id))

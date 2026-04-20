@@ -71,6 +71,14 @@ export type HospitalDetailPanelProps = {
   commentError?: string | null;
   onChangeComment?: (next: string) => void;
   onSaveComment?: () => void;
+  reportEnabled?: boolean;
+  reportCategory?: string;
+  reportMessage?: string;
+  reportSaving?: boolean;
+  reportError?: string | null;
+  onChangeReportCategory?: (next: string) => void;
+  onChangeReportMessage?: (next: string) => void;
+  onSubmitReport?: () => void;
 };
 
 function formatDistance(meters: number) {
@@ -410,6 +418,14 @@ export function HospitalDetailPanel({
   commentError = null,
   onChangeComment,
   onSaveComment,
+  reportEnabled = false,
+  reportCategory = "datos",
+  reportMessage = "",
+  reportSaving = false,
+  reportError = null,
+  onChangeReportCategory,
+  onChangeReportMessage,
+  onSubmitReport,
 }: HospitalDetailPanelProps) {
   const imageUrl = hospital && hospital.imagenes && hospital.imagenes.length > 0 ? hospital.imagenes[0] : null;
   const [imageOk, setImageOk] = React.useState(true);
@@ -963,6 +979,44 @@ export function HospitalDetailPanel({
                           disabled={!commentEnabled || commentLoading || commentSaving || !onSaveComment}
                         >
                           {commentSaving ? "Guardando…" : "Guardar nota"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
+                      <div className="text-sm font-semibold text-[var(--title)]">Reportar (visible solo para Admin)</div>
+                      <div className="mt-2 grid gap-2">
+                        <select
+                          value={reportCategory}
+                          onChange={(e) => onChangeReportCategory?.(e.target.value)}
+                          disabled={!reportEnabled || reportSaving}
+                          className="h-10 w-full rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 text-sm font-semibold text-[var(--title)] outline-none disabled:opacity-60"
+                        >
+                          <option value="datos">Datos incorrectos</option>
+                          <option value="ubicacion">Ubicación incorrecta</option>
+                          <option value="plazas">Plazas/Oferta</option>
+                          <option value="bug">Bug / UI</option>
+                          <option value="otro">Otro</option>
+                        </select>
+                        <textarea
+                          value={reportMessage}
+                          onChange={(e) => onChangeReportMessage?.(e.target.value)}
+                          placeholder={reportEnabled ? "Describe el problema…" : "Inicia sesión para reportar."}
+                          disabled={!reportEnabled || reportSaving}
+                          className="min-h-[110px] w-full resize-none rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 py-3 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5 disabled:opacity-60"
+                        />
+                        {reportError ? (
+                          <div className="rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-2 text-xs font-semibold text-[var(--title)]">
+                            {reportError}
+                          </div>
+                        ) : null}
+                        <Button
+                          variant="secondary"
+                          className="w-full"
+                          onClick={() => onSubmitReport?.()}
+                          disabled={!reportEnabled || reportSaving || !onSubmitReport}
+                        >
+                          {reportSaving ? "Enviando…" : "Enviar reporte"}
                         </Button>
                       </div>
                     </div>

@@ -658,6 +658,17 @@ function initSchema(db) {
       UNIQUE(user_id, hospital_id)
     );
 
+    CREATE TABLE IF NOT EXISTS reports (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      subject_type TEXT NOT NULL,
+      subject_id TEXT NOT NULL,
+      category TEXT,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_hospitals_departamento ON hospitals(departamento);
     CREATE INDEX IF NOT EXISTS idx_hospitals_provincia ON hospitals(provincia);
     CREATE INDEX IF NOT EXISTS idx_hospitals_distrito ON hospitals(distrito);
@@ -671,6 +682,8 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_serums_offers_codigo ON serums_offers(codigo_renipress_modular);
     CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
     CREATE INDEX IF NOT EXISTS idx_hospital_comments_user ON hospital_comments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_reports_subject ON reports(subject_type, subject_id);
+    CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at);
   `);
 
   ensureColumn(db, "users", "role TEXT NOT NULL DEFAULT 'user'", "role");
@@ -678,6 +691,11 @@ function initSchema(db) {
   ensureColumn(db, "users", "email_verified_at TEXT", "email_verified_at");
   ensureColumn(db, "favorites", "sort_order INTEGER", "sort_order");
   ensureColumn(db, "favorites", "updated_at TEXT", "updated_at");
+  db.exec(`CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, user_id TEXT, subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, category TEXT, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT);`);
+  ensureColumn(db, "reports", "category TEXT", "category");
+  ensureColumn(db, "reports", "status TEXT NOT NULL DEFAULT 'open'", "status");
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_subject ON reports(subject_type, subject_id);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at);`);
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_admin ON users(role) WHERE role = 'admin'`);
 }
 
@@ -802,6 +820,19 @@ async function ensureSchemaReady() {
         );
       `);
 
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS reports (
+          id TEXT PRIMARY KEY,
+          user_id TEXT,
+          subject_type TEXT NOT NULL,
+          subject_id TEXT NOT NULL,
+          category TEXT,
+          message TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open',
+          created_at TIMESTAMPTZ
+        );
+      `);
+
       await db.query(`CREATE INDEX IF NOT EXISTS idx_hospitals_departamento ON hospitals(departamento);`);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_hospitals_provincia ON hospitals(provincia);`);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_hospitals_distrito ON hospitals(distrito);`);
@@ -814,6 +845,8 @@ async function ensureSchemaReady() {
       await db.query(`CREATE INDEX IF NOT EXISTS idx_serums_offers_profesion ON serums_offers(profesion);`);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_serums_offers_codigo ON serums_offers(codigo_renipress_modular);`);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);`);
+      await db.query(`CREATE INDEX IF NOT EXISTS idx_reports_subject ON reports(subject_type, subject_id);`);
+      await db.query(`CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at);`);
       await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_admin ON users(role) WHERE role = 'admin';`);
 
       const shouldSeed = await shouldSeedPostgresFromBundledSqlite(db);

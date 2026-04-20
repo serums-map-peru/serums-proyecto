@@ -53,7 +53,20 @@ export function ensureAuthSchema(db: DatabaseSync) {
       UNIQUE(user_id, hospital_id)
     );
 
+    CREATE TABLE IF NOT EXISTS reports (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      subject_type TEXT NOT NULL,
+      subject_id TEXT NOT NULL,
+      category TEXT,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
     CREATE INDEX IF NOT EXISTS idx_hospital_comments_user ON hospital_comments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_reports_subject ON reports(subject_type, subject_id);
+    CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at);
   `);
 }
