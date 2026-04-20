@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 
-const { queryAll, queryOne, execute } = require("./index");
+const { queryAll, queryOne, execute, withTransaction } = require("./index");
 
 function nowIso() {
   return new Date().toISOString();
@@ -25,6 +25,7 @@ function normalizeFavoriteRow(row) {
   const item_type = String(row.item_type || "").toLowerCase();
   const item_id = String(row.item_id || "");
   const created_at = row.created_at ? String(row.created_at) : null;
+  const sort_order = row.sort_order != null ? Number(row.sort_order) : null;
 
   const base = {
     id: String(row.id),
@@ -34,6 +35,7 @@ function normalizeFavoriteRow(row) {
     lat: row.lat != null ? Number(row.lat) : null,
     lon: row.lon != null ? Number(row.lon) : null,
     meta: safeJsonParse(row.meta_json),
+    sort_order: Number.isFinite(sort_order) ? sort_order : null,
     created_at,
   };
 
@@ -73,16 +75,26 @@ async function upsertFavorite({
 }) {
   const id = generateId();
   const created_at = nowIso();
+  const updated_at = created_at;
   const meta_json = meta != null ? JSON.stringify(meta) : null;
 
   await execute(
-    `INSERT INTO favorites (id, user_id, item_type, item_id, name, lat, lon, meta_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO favorites (id, user_id, item_type, item_id, name, lat, lon, meta_json, sort_order, created_at, updated_at)
+     VALUES (
+       ?, ?, ?, ?, ?, ?, ?, ?,
+       (CASE
+          WHEN EXISTS(SELECT 1 FROM favorites WHERE user_id = ? AND sort_order IS NOT NULL)
+          THEN (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM favorites WHERE user_id = ? AND sort_order IS NOT NULL)
+          ELSE NULL
+        END),
+       ?, ?
+     )
      ON CONFLICT (user_id, item_type, item_id) DO UPDATE SET
        name = excluded.name,
        lat = excluded.lat,
        lon = excluded.lon,
-       meta_json = excluded.meta_json`,
+       meta_json = excluded.meta_json,
+       updated_at = excluded.updated_at`,
     [
       String(id),
       String(userId),
@@ -92,7 +104,10 @@ async function upsertFavorite({
       lat != null ? Number(lat) : null,
       lon != null ? Number(lon) : null,
       meta_json,
+      String(userId),
+      String(userId),
       created_at,
+      updated_at,
     ],
   );
 
@@ -101,7 +116,7 @@ async function upsertFavorite({
 
 async function getFavorite({ userId, item_type, item_id }) {
   const row = await queryOne(
-    `SELECT id, item_type, item_id, name, lat, lon, meta_json, created_at
+    `SELECT id, item_type, item_id, name, lat, lon, meta_json, sort_order, created_at
      FROM favorites
      WHERE user_id = ? AND item_type = ? AND item_id = ?
      LIMIT 1`,
@@ -121,6 +136,7 @@ async function listFavorites({ userId, limit = 200 }) {
         f.lat,
         f.lon,
         f.meta_json,
+        f.sort_order,
         f.created_at,
         h.id AS h_id,
         h.profesion AS h_profesion,
@@ -140,11 +156,36 @@ async function listFavorites({ userId, limit = 200 }) {
      LEFT JOIN hospitals h
        ON (f.item_type = 'hospital' AND h.id = f.item_id)
      WHERE f.user_id = ?
-     ORDER BY f.created_at DESC
+     ORDER BY (f.sort_order IS NULL) ASC, f.sort_order ASC, f.created_at DESC
      LIMIT ?`,
     [String(userId), n],
   );
   return rows.map(normalizeFavoriteRow).filter(Boolean);
+}
+
+async function updateFavoritesOrder({ userId, orderedIds }) {
+  const ids = Array.isArray(orderedIds) ? orderedIds.map((v) => String(v)).filter(Boolean) : [];
+  if (ids.length === 0) return { updated: 0 };
+
+  const uniqueIds = Array.from(new Set(ids));
+
+  return await withTransaction(async ({ execute: txExecute }) => {
+    const now = nowIso();
+
+    await txExecute("UPDATE favorites SET sort_order = NULL, updated_at = ? WHERE user_id = ?", [now, String(userId)]);
+
+    let updated = 0;
+    for (let i = 0; i < uniqueIds.length; i++) {
+      const id = uniqueIds[i];
+      const r = await txExecute(
+        "UPDATE favorites SET sort_order = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+        [i, now, String(id), String(userId)],
+      );
+      updated += r && typeof r.rowCount === "number" ? r.rowCount : 0;
+    }
+
+    return { updated };
+  });
 }
 
 async function deleteFavorite({ userId, item_type, item_id }) {
@@ -156,4 +197,4 @@ async function deleteFavorite({ userId, item_type, item_id }) {
   return (r && r.rowCount) > 0;
 }
 
-module.exports = { upsertFavorite, getFavorite, listFavorites, deleteFavorite };
+module.exports = { upsertFavorite, getFavorite, listFavorites, updateFavoritesOrder, deleteFavorite };

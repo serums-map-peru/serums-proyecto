@@ -355,6 +355,9 @@ export default function HomePage() {
   const [notesError, setNotesError] = React.useState<string | null>(null);
   const [favoritesSearch, setFavoritesSearch] = React.useState("");
   const [notesOpenByFavoriteId, setNotesOpenByFavoriteId] = React.useState<Record<string, boolean>>({});
+  const [favoriteDraggingId, setFavoriteDraggingId] = React.useState<string | null>(null);
+  const [favoriteDragOverId, setFavoriteDragOverId] = React.useState<string | null>(null);
+  const [favoritesReorderSaving, setFavoritesReorderSaving] = React.useState(false);
 
   const [commentDraftByHospitalId, setCommentDraftByHospitalId] = React.useState<Record<string, string>>({});
   const [commentLoadingId, setCommentLoadingId] = React.useState<string | null>(null);
@@ -668,6 +671,51 @@ export default function HomePage() {
       await refreshFavorites();
     },
     [apiBase, extractApiErrorMessage, openAuth, refreshFavorites],
+  );
+
+  const persistFavoriteOrder = React.useCallback(
+    async (ids: string[]) => {
+      const token = getAuthToken();
+      if (!token) {
+        openAuth("login");
+        return;
+      }
+      if (favoritesReorderSaving) return;
+      setFavoritesReorderSaving(true);
+      try {
+        const r = await fetch(`${apiBase}/favoritos/orden`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        const body = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo reordenar favoritos."));
+      } catch (e) {
+        setFavoritesError(e instanceof Error ? e.message : "No se pudo reordenar favoritos.");
+        await refreshFavorites();
+      } finally {
+        setFavoritesReorderSaving(false);
+      }
+    },
+    [apiBase, extractApiErrorMessage, favoritesReorderSaving, openAuth, refreshFavorites],
+  );
+
+  const moveFavoriteInList = React.useCallback(
+    (fromId: string, toId: string) => {
+      if (!fromId || !toId || fromId === toId) return;
+      if (favoritesSearch.trim()) return;
+      setFavorites((prev) => {
+        const fromIndex = prev.findIndex((f) => f.id === fromId);
+        const toIndex = prev.findIndex((f) => f.id === toId);
+        if (fromIndex < 0 || toIndex < 0) return prev;
+        const next = prev.slice();
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+        void persistFavoriteOrder(next.map((f) => f.id));
+        return next;
+      });
+    },
+    [favoritesSearch, persistFavoriteOrder],
   );
 
   // moved below handleSelectHospital to avoid TDZ
@@ -1595,10 +1643,31 @@ export default function HomePage() {
                       ? "#22C55E"
                       : "#EF4444";
                     const nivel = fav.item_type === "hospital" ? String(fav.hospital?.categoria || "").trim() : "";
+                    const gd = fav.item_type === "hospital" ? String(fav.hospital?.grado_dificultad || "").trim() : "";
                     const notesOpen = !!notesOpenByFavoriteId[fav.id];
                     const location = fav.item_type === "hospital" ? String(fav.hospital?.departamento || "").trim() : "";
+                    const dragDisabled = !!favoritesSearch.trim() || favoritesReorderSaving;
                     return (
-                      <div key={fav.id} className="relative overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white">
+                      <div
+                        key={fav.id}
+                        className={`relative overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-white${
+                          favoriteDragOverId === fav.id ? " ring-2 ring-[#0B5FFF]/30" : ""
+                        }`}
+                        onDragOver={(e) => {
+                          if (dragDisabled) return;
+                          if (!favoriteDraggingId) return;
+                          e.preventDefault();
+                          setFavoriteDragOverId(fav.id);
+                        }}
+                        onDrop={(e) => {
+                          if (dragDisabled) return;
+                          e.preventDefault();
+                          const fromId = favoriteDraggingId || e.dataTransfer.getData("text/plain");
+                          moveFavoriteInList(fromId, fav.id);
+                          setFavoriteDraggingId(null);
+                          setFavoriteDragOverId(null);
+                        }}
+                      >
                         <div className="absolute left-0 top-0 h-full w-[2px] bg-[#0B5FFF]/80" aria-hidden="true" />
                         <div className="flex items-start justify-between gap-3 px-4 py-3">
                           <button type="button" className="min-w-0 text-left" onClick={() => handleSelectFavorite(fav)}>
@@ -1629,6 +1698,41 @@ export default function HomePage() {
                           </button>
 
                           <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              draggable={!dragDisabled}
+                              onDragStart={(e) => {
+                                if (dragDisabled) return;
+                                setFavoriteDraggingId(fav.id);
+                                e.dataTransfer.setData("text/plain", fav.id);
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
+                              onDragEnd={() => {
+                                setFavoriteDraggingId(null);
+                                setFavoriteDragOverId(null);
+                              }}
+                              className={
+                                dragDisabled
+                                  ? "inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-xl border border-[var(--border)] text-[var(--label)] opacity-50"
+                                  : "inline-flex h-8 w-8 cursor-grab items-center justify-center rounded-xl border border-[var(--border)] text-[var(--label)] transition-colors hover:bg-[#F3F4F6] active:cursor-grabbing"
+                              }
+                              aria-label="Reordenar favorito"
+                              title={dragDisabled ? "Desactiva búsqueda para reordenar" : "Arrastra para reordenar"}
+                            >
+                              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                                <path
+                                  d="M9 7h.01M9 12h.01M9 17h.01M15 7h.01M15 12h.01M15 17h.01"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                />
+                              </svg>
+                            </button>
+                            {gd ? (
+                              <span className="inline-flex h-7 min-w-[2.25rem] items-center justify-center rounded-full border border-[#D1FAE5] bg-[#ECFDF5] px-3 text-xs font-semibold tracking-wide text-[#065F46]">
+                                {gd}
+                              </span>
+                            ) : null}
                             {nivel ? (
                               <span className="inline-flex h-7 min-w-[2.25rem] items-center justify-center rounded-full border border-[#CDE1FF] bg-[#EEF5FF] px-3 text-xs font-semibold tracking-wide text-[#1D1D1F]">
                                 {nivel}

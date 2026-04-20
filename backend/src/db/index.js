@@ -639,7 +639,9 @@ function initSchema(db) {
       lat REAL,
       lon REAL,
       meta_json TEXT,
+      sort_order INTEGER,
       created_at TEXT,
+      updated_at TEXT,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
       UNIQUE(user_id, item_type, item_id)
     );
@@ -674,6 +676,8 @@ function initSchema(db) {
   ensureColumn(db, "users", "role TEXT NOT NULL DEFAULT 'user'", "role");
   ensureColumn(db, "users", "email_verified INTEGER NOT NULL DEFAULT 0", "email_verified");
   ensureColumn(db, "users", "email_verified_at TEXT", "email_verified_at");
+  ensureColumn(db, "favorites", "sort_order INTEGER", "sort_order");
+  ensureColumn(db, "favorites", "updated_at TEXT", "updated_at");
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_admin ON users(role) WHERE role = 'admin'`);
 }
 
@@ -770,12 +774,17 @@ async function ensureSchemaReady() {
           lat DOUBLE PRECISION,
           lon DOUBLE PRECISION,
           meta_json TEXT,
+          sort_order INTEGER,
           created_at TIMESTAMPTZ,
+          updated_at TIMESTAMPTZ,
           CONSTRAINT fk_favorites_user
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
           UNIQUE(user_id, item_type, item_id)
         );
       `);
+
+      await db.query(`ALTER TABLE favorites ADD COLUMN IF NOT EXISTS sort_order INTEGER;`);
+      await db.query(`ALTER TABLE favorites ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
 
       await db.query(`
         CREATE TABLE IF NOT EXISTS hospital_comments (

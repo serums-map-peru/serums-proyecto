@@ -24,4 +24,11 @@ const removeFavorite = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
-module.exports = { listFavorites, addFavorite, removeFavorite };
+const reorderFavorites = asyncHandler(async (req, res) => {
+  const userId = req.user && req.user.id ? String(req.user.id) : "";
+  const { ids } = req.body || {};
+  const result = await favoritesService.reorderFavorites({ userId, ids });
+  res.json(result);
+});
+
+module.exports = { listFavorites, addFavorite, removeFavorite, reorderFavorites };

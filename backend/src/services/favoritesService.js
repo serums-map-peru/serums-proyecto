@@ -72,4 +72,11 @@ async function removeFavorite({ userId, item_type, item_id }) {
   return { ok: true };
 }
 
-module.exports = { listFavorites, addFavorite, removeFavorite };
+async function reorderFavorites({ userId, ids }) {
+  if (!Array.isArray(ids) || ids.length === 0) throw new HttpError(400, "Lista de favoritos requerida");
+  if (ids.length > 500) throw new HttpError(400, "Lista demasiado grande");
+  const result = await favoritesRepository.updateFavoritesOrder({ userId, orderedIds: ids });
+  return { ok: true, updated: result && typeof result.updated === "number" ? result.updated : 0 };
+}
+
+module.exports = { listFavorites, addFavorite, removeFavorite, reorderFavorites };
