@@ -71,14 +71,7 @@ export type HospitalDetailPanelProps = {
   commentError?: string | null;
   onChangeComment?: (next: string) => void;
   onSaveComment?: () => void;
-  reportEnabled?: boolean;
-  reportCategory?: string;
-  reportMessage?: string;
-  reportSaving?: boolean;
-  reportError?: string | null;
-  onChangeReportCategory?: (next: string) => void;
-  onChangeReportMessage?: (next: string) => void;
-  onSubmitReport?: () => void;
+  onOpenReport?: () => void;
 };
 
 function formatDistance(meters: number) {
@@ -418,14 +411,7 @@ export function HospitalDetailPanel({
   commentError = null,
   onChangeComment,
   onSaveComment,
-  reportEnabled = false,
-  reportCategory = "datos",
-  reportMessage = "",
-  reportSaving = false,
-  reportError = null,
-  onChangeReportCategory,
-  onChangeReportMessage,
-  onSubmitReport,
+  onOpenReport,
 }: HospitalDetailPanelProps) {
   const imageUrl = hospital && hospital.imagenes && hospital.imagenes.length > 0 ? hospital.imagenes[0] : null;
   const [imageOk, setImageOk] = React.useState(true);
@@ -755,6 +741,41 @@ export function HospitalDetailPanel({
                   type="button"
                   className={cn(
                     "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]",
+                    !hospital ? "opacity-50" : "",
+                  )}
+                  aria-label="Reportar incidente"
+                  title="Reportar incidente"
+                  disabled={!hospital}
+                  onClick={() => {
+                    if (!hospital) return;
+                    onOpenReport?.();
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
+                    <path
+                      d="M12 9v4"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M12 17h.01"
+                      stroke="currentColor"
+                      strokeWidth="2.6"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M10.2 4.6 2.6 18.1c-.7 1.2.2 2.9 1.6 2.9h15.6c1.4 0 2.3-1.6 1.6-2.9L13.8 4.6c-.7-1.2-2.9-1.2-3.6 0Z"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-white text-[var(--title)] shadow-[var(--shadow-soft)] hover:bg-black/[0.03]",
                     !hospital || !mapsUrlForHospital(hospital) ? "opacity-50" : "",
                   )}
                   aria-label="Abrir en Google Maps"
@@ -956,14 +977,14 @@ export function HospitalDetailPanel({
                     </div>
 
                     <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                      <div className="text-sm font-semibold text-[var(--title)]">Notas (privado)</div>
+                      <div className="text-sm font-semibold text-[var(--title)]">Notas</div>
                       <div className="mt-2">
                         <textarea
                           value={comment}
                           onChange={(e) => onChangeComment?.(e.target.value)}
                           placeholder={commentEnabled ? "Escribe tu nota..." : "Inicia sesión para guardar notas."}
                           disabled={!commentEnabled || commentLoading}
-                          className="min-h-[110px] w-full resize-none rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 py-3 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5 disabled:opacity-60"
+                          className="min-h-[110px] w-full resize-y rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 py-3 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5 disabled:opacity-60"
                         />
                       </div>
                       <div className="mt-2 grid gap-2">
@@ -979,44 +1000,6 @@ export function HospitalDetailPanel({
                           disabled={!commentEnabled || commentLoading || commentSaving || !onSaveComment}
                         >
                           {commentSaving ? "Guardando…" : "Guardar nota"}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                      <div className="text-sm font-semibold text-[var(--title)]">Reportar (visible solo para Admin)</div>
-                      <div className="mt-2 grid gap-2">
-                        <select
-                          value={reportCategory}
-                          onChange={(e) => onChangeReportCategory?.(e.target.value)}
-                          disabled={!reportEnabled || reportSaving}
-                          className="h-10 w-full rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 text-sm font-semibold text-[var(--title)] outline-none disabled:opacity-60"
-                        >
-                          <option value="datos">Datos incorrectos</option>
-                          <option value="ubicacion">Ubicación incorrecta</option>
-                          <option value="plazas">Plazas/Oferta</option>
-                          <option value="bug">Bug / UI</option>
-                          <option value="otro">Otro</option>
-                        </select>
-                        <textarea
-                          value={reportMessage}
-                          onChange={(e) => onChangeReportMessage?.(e.target.value)}
-                          placeholder={reportEnabled ? "Describe el problema…" : "Inicia sesión para reportar."}
-                          disabled={!reportEnabled || reportSaving}
-                          className="min-h-[110px] w-full resize-none rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 py-3 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5 disabled:opacity-60"
-                        />
-                        {reportError ? (
-                          <div className="rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-2 text-xs font-semibold text-[var(--title)]">
-                            {reportError}
-                          </div>
-                        ) : null}
-                        <Button
-                          variant="secondary"
-                          className="w-full"
-                          onClick={() => onSubmitReport?.()}
-                          disabled={!reportEnabled || reportSaving || !onSubmitReport}
-                        >
-                          {reportSaving ? "Enviando…" : "Enviar reporte"}
                         </Button>
                       </div>
                     </div>

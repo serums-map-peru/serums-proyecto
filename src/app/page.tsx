@@ -363,10 +363,12 @@ export default function HomePage() {
   const [commentLoadingId] = React.useState<string | null>(null);
   const [commentSavingId, setCommentSavingId] = React.useState<string | null>(null);
   const [commentErrorByHospitalId, setCommentErrorByHospitalId] = React.useState<Record<string, string | null>>({});
-  const [reportCategoryByHospitalId, setReportCategoryByHospitalId] = React.useState<Record<string, string>>({});
-  const [reportMessageByHospitalId, setReportMessageByHospitalId] = React.useState<Record<string, string>>({});
-  const [reportSavingId, setReportSavingId] = React.useState<string | null>(null);
-  const [reportErrorByHospitalId, setReportErrorByHospitalId] = React.useState<Record<string, string | null>>({});
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const [reportHospitalId, setReportHospitalId] = React.useState<string | null>(null);
+  const [reportCategory, setReportCategory] = React.useState("datos");
+  const [reportMessage, setReportMessage] = React.useState("");
+  const [reportSaving, setReportSaving] = React.useState(false);
+  const [reportError, setReportError] = React.useState<string | null>(null);
   const [adminInboxOpen, setAdminInboxOpen] = React.useState(false);
   const [adminReportsLoading, setAdminReportsLoading] = React.useState(false);
   const [adminReportsError, setAdminReportsError] = React.useState<string | null>(null);
@@ -467,26 +469,24 @@ export default function HomePage() {
     return typeof m.notes === "string" ? m.notes : "";
   }, []);
 
+  const notesLastSyncedByFavoriteIdRef = React.useRef<Record<string, string>>({});
+  const notesLastSyncedByHospitalIdRef = React.useRef<Record<string, string>>({});
+
   React.useEffect(() => {
     if (!detailOpen) return;
     if (!selectedHospitalId) return;
     if (!favoritesEnabled) return;
     const hospitalId = selectedHospitalId;
     setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: null }));
+    const fav = favorites.find((f) => f.item_type === "hospital" && f.item_id === hospitalId);
+    const incoming = extractNotes(fav?.meta);
+    const lastSynced = notesLastSyncedByHospitalIdRef.current[hospitalId];
+    notesLastSyncedByHospitalIdRef.current = { ...notesLastSyncedByHospitalIdRef.current, [hospitalId]: incoming };
     setCommentDraftByHospitalId((prev) => {
-      if (prev[hospitalId] != null) return prev;
-      const fav = favorites.find((f) => f.item_type === "hospital" && f.item_id === hospitalId);
-      return { ...prev, [hospitalId]: extractNotes(fav?.meta) };
+      const current = prev[hospitalId];
+      if (current != null && lastSynced != null && current !== lastSynced) return prev;
+      return { ...prev, [hospitalId]: incoming };
     });
-    setReportCategoryByHospitalId((prev) => {
-      if (prev[hospitalId] != null) return prev;
-      return { ...prev, [hospitalId]: "datos" };
-    });
-    setReportMessageByHospitalId((prev) => {
-      if (prev[hospitalId] != null) return prev;
-      return { ...prev, [hospitalId]: "" };
-    });
-    setReportErrorByHospitalId((p) => ({ ...p, [hospitalId]: null }));
   }, [detailOpen, extractNotes, favorites, favoritesEnabled, selectedHospitalId]);
 
   const saveHospitalComment = React.useCallback(
@@ -510,6 +510,7 @@ export default function HomePage() {
         });
         const body = await r.json().catch(() => null);
         if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo guardar la nota."));
+        notesLastSyncedByHospitalIdRef.current = { ...notesLastSyncedByHospitalIdRef.current, [hospitalId]: draft };
         await refreshFavorites();
         setCommentDraftByHospitalId((p) => ({ ...p, [hospitalId]: draft }));
       } catch (e) {
@@ -521,37 +522,54 @@ export default function HomePage() {
     [apiBase, commentDraftByHospitalId, extractApiErrorMessage, favorites, openAuth, refreshFavorites],
   );
 
-  const submitHospitalReport = React.useCallback(
-    async (hospitalId: string) => {
+  const openReportModal = React.useCallback(
+    (hospitalId: string) => {
       const token = getAuthToken();
       if (!token) {
         openAuth("login");
         return;
       }
-      const category = reportCategoryByHospitalId[hospitalId] ?? "datos";
-      const message = reportMessageByHospitalId[hospitalId] ?? "";
-      setReportSavingId(hospitalId);
-      setReportErrorByHospitalId((p) => ({ ...p, [hospitalId]: null }));
-      try {
-        const r = await fetch(`${apiBase}/reportes`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ subject_type: "hospital", subject_id: hospitalId, category, message }),
-        });
-        const body = await r.json().catch(() => null);
-        if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo enviar el reporte."));
-        setReportMessageByHospitalId((p) => ({ ...p, [hospitalId]: "" }));
-      } catch (e) {
-        setReportErrorByHospitalId((p) => ({
-          ...p,
-          [hospitalId]: e instanceof Error ? e.message : "No se pudo enviar el reporte.",
-        }));
-      } finally {
-        setReportSavingId((cur) => (cur === hospitalId ? null : cur));
-      }
+      setReportHospitalId(hospitalId);
+      setReportCategory("datos");
+      setReportMessage("");
+      setReportError(null);
+      setReportOpen(true);
     },
-    [apiBase, extractApiErrorMessage, openAuth, reportCategoryByHospitalId, reportMessageByHospitalId],
+    [openAuth],
   );
+
+  const submitReportModal = React.useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) {
+      openAuth("login");
+      return;
+    }
+    const hospitalId = reportHospitalId;
+    if (!hospitalId) return;
+    if (reportSaving) return;
+    setReportSaving(true);
+    setReportError(null);
+    try {
+      const r = await fetch(`${apiBase}/reportes`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject_type: "hospital",
+          subject_id: hospitalId,
+          category: reportCategory,
+          message: reportMessage,
+        }),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo enviar el reporte."));
+      setReportOpen(false);
+      setReportMessage("");
+    } catch (e) {
+      setReportError(e instanceof Error ? e.message : "No se pudo enviar el reporte.");
+    } finally {
+      setReportSaving(false);
+    }
+  }, [apiBase, extractApiErrorMessage, openAuth, reportCategory, reportHospitalId, reportMessage, reportSaving]);
 
   const loadAdminReports = React.useCallback(async () => {
     const token = getAuthToken();
@@ -604,11 +622,32 @@ export default function HomePage() {
 
   React.useEffect(() => {
     setNotesDraftByFavoriteId((prev) => {
+      const synced = notesLastSyncedByFavoriteIdRef.current;
+      let syncedNext: Record<string, string> | null = null;
+      let changed = false;
       const next: Record<string, string> = { ...prev };
+
       for (const f of favorites) {
-        if (!(f.id in next)) next[f.id] = extractNotes(f.meta);
+        const incoming = extractNotes(f.meta);
+        const current = prev[f.id];
+        const lastSynced = synced[f.id];
+
+        if (lastSynced !== incoming) {
+          if (!syncedNext) syncedNext = { ...synced };
+          syncedNext[f.id] = incoming;
+        }
+
+        const isDirty = current != null && lastSynced != null && current !== lastSynced;
+        if (current == null || !isDirty) {
+          if (current !== incoming) {
+            next[f.id] = incoming;
+            changed = true;
+          }
+        }
       }
-      return next;
+
+      if (syncedNext) notesLastSyncedByFavoriteIdRef.current = syncedNext;
+      return changed ? next : prev;
     });
   }, [extractNotes, favorites]);
 
@@ -668,6 +707,11 @@ export default function HomePage() {
         });
         const json = await r.json().catch(() => null);
         if (!r.ok) throw new Error(extractApiErrorMessage(json, "No se pudo guardar la nota."));
+        notesLastSyncedByFavoriteIdRef.current = { ...notesLastSyncedByFavoriteIdRef.current, [fav.id]: current };
+        if (fav.item_type === "hospital") {
+          notesLastSyncedByHospitalIdRef.current = { ...notesLastSyncedByHospitalIdRef.current, [fav.item_id]: current };
+          setCommentDraftByHospitalId((p) => (p[fav.item_id] != null ? p : { ...p, [fav.item_id]: current }));
+        }
         await refreshFavorites();
       } catch (e) {
         setNotesError(e instanceof Error ? e.message : "No se pudo guardar la nota.");
@@ -2371,22 +2415,9 @@ export default function HomePage() {
           if (!selectedHospitalId) return;
           saveHospitalComment(selectedHospitalId);
         }}
-        reportEnabled={favoritesEnabled}
-        reportCategory={selectedHospitalId ? (reportCategoryByHospitalId[selectedHospitalId] ?? "datos") : "datos"}
-        reportMessage={selectedHospitalId ? (reportMessageByHospitalId[selectedHospitalId] ?? "") : ""}
-        reportSaving={!!(selectedHospitalId && reportSavingId === selectedHospitalId)}
-        reportError={selectedHospitalId ? (reportErrorByHospitalId[selectedHospitalId] ?? null) : null}
-        onChangeReportCategory={(next) => {
+        onOpenReport={() => {
           if (!selectedHospitalId) return;
-          setReportCategoryByHospitalId((p) => ({ ...p, [selectedHospitalId]: next }));
-        }}
-        onChangeReportMessage={(next) => {
-          if (!selectedHospitalId) return;
-          setReportMessageByHospitalId((p) => ({ ...p, [selectedHospitalId]: next }));
-        }}
-        onSubmitReport={() => {
-          if (!selectedHospitalId) return;
-          submitHospitalReport(selectedHospitalId);
+          openReportModal(selectedHospitalId);
         }}
         isHospitalFavorited={
           !!(selectedHospital && favorites.some((f) => f.item_type === "hospital" && f.item_id === selectedHospital.id))
@@ -2413,6 +2444,85 @@ export default function HomePage() {
         isPlaceFavorited={(placeId) => favorites.some((f) => f.item_type === "place" && f.item_id === placeId)}
         onRequestAuthForFavorites={() => openAuth("login")}
       />
+
+      {reportOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setReportOpen(false);
+          }}
+        >
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
+              <div className="min-w-0">
+                <div className="text-base font-semibold text-[var(--title)]">Reportar incidente</div>
+                <div className="mt-0.5 line-clamp-1 text-xs font-medium text-[var(--label)]">
+                  {selectedHospital && reportHospitalId === selectedHospital.id
+                    ? selectedHospital.nombre_establecimiento || selectedHospital.id
+                    : reportHospitalId || ""}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-9 rounded-full border border-[#E5E5E7] bg-white px-4 text-sm font-semibold text-[#1D1D1F] hover:bg-black/[0.03]"
+                onClick={() => setReportOpen(false)}
+              >
+                Cerrar
+              </Button>
+            </div>
+
+            <div className="px-5 py-4">
+              <div className="grid gap-3">
+                <select
+                  value={reportCategory}
+                  onChange={(e) => setReportCategory(e.target.value)}
+                  disabled={reportSaving}
+                  className="h-10 w-full rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 text-sm font-semibold text-[var(--title)] outline-none disabled:opacity-60"
+                >
+                  <option value="datos">Datos incorrectos</option>
+                  <option value="ubicacion">Ubicación incorrecta</option>
+                  <option value="plazas">Plazas/Oferta</option>
+                  <option value="bug">Bug / UI</option>
+                  <option value="otro">Otro</option>
+                </select>
+                <textarea
+                  value={reportMessage}
+                  onChange={(e) => setReportMessage(e.target.value)}
+                  placeholder="Describe el problema…"
+                  disabled={reportSaving}
+                  className="min-h-[130px] w-full resize-y rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 py-3 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5 disabled:opacity-60"
+                />
+                {reportError ? (
+                  <div className="rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-2 text-xs font-semibold text-[var(--title)]">
+                    {reportError}
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-9 rounded-full border border-[#E5E5E7] bg-white px-4 text-sm font-semibold text-[#1D1D1F] hover:bg-black/[0.03]"
+                    onClick={() => setReportOpen(false)}
+                    disabled={reportSaving}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-9 rounded-full !bg-[#0B5FFF] px-4 text-sm font-semibold !text-white shadow-[0_10px_20px_rgba(11,95,255,0.28)] hover:brightness-105"
+                    onClick={() => void submitReportModal()}
+                    disabled={reportSaving || !reportHospitalId || !reportMessage.trim()}
+                  >
+                    {reportSaving ? "Enviando…" : "Enviar"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <AuthModal
         open={authOpen}
