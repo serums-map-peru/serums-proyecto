@@ -228,16 +228,16 @@ async function main() {
   const have = await client.query(
     `
       SELECT
-        LPAD(regexp_replace(o.codigo_renipress_modular::text, '[^0-9]', '', 'g'), 8, '0') AS code,
+        LPAD(regexp_replace(h.codigo_renipress_modular::text, '[^0-9]', '', 'g'), 8, '0') AS code,
         COUNT(*) AS ofertas,
         COALESCE(SUM(o.plazas),0) AS plazas
       FROM serums_offers o
       JOIN hospitals h ON h.id = o.hospital_id
-      WHERE o.periodo = $1
-        AND o.profesion = $2
-        AND h.grado_dificultad = $3
-        AND o.codigo_renipress_modular IS NOT NULL
-        AND LENGTH(TRIM(o.codigo_renipress_modular::text)) > 0
+      WHERE o.periodo::text ILIKE $1::text
+        AND o.profesion::text ILIKE $2::text
+        AND h.grado_dificultad::text ILIKE $3::text
+        AND h.codigo_renipress_modular IS NOT NULL
+        AND LENGTH(TRIM(h.codigo_renipress_modular::text)) > 0
       GROUP BY 1
     `,
     [periodo, profesion, gd],
