@@ -940,12 +940,12 @@ export function HospitalDetailPanel({
                     </div>
 
                     <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-white px-4 py-4 shadow-[var(--shadow-soft)]">
-                      <div className="text-sm font-semibold text-[var(--title)]">Comentarios (privado)</div>
+                      <div className="text-sm font-semibold text-[var(--title)]">Notas (privado)</div>
                       <div className="mt-2">
                         <textarea
                           value={comment}
                           onChange={(e) => onChangeComment?.(e.target.value)}
-                          placeholder={commentEnabled ? "Escribe tu comentario..." : "Inicia sesión para guardar comentarios."}
+                          placeholder={commentEnabled ? "Escribe tu nota..." : "Inicia sesión para guardar notas."}
                           disabled={!commentEnabled || commentLoading}
                           className="min-h-[110px] w-full resize-none rounded-[var(--radius-card)] border border-[var(--border)] bg-white px-3 py-3 text-sm font-medium text-[var(--title)] shadow-[0_1px_0_rgba(0,0,0,0.04)] outline-none placeholder:text-[var(--label)] focus:border-black/10 focus:ring-2 focus:ring-black/5 disabled:opacity-60"
                         />
@@ -962,7 +962,7 @@ export function HospitalDetailPanel({
                           onClick={() => onSaveComment?.()}
                           disabled={!commentEnabled || commentLoading || commentSaving || !onSaveComment}
                         >
-                          {commentSaving ? "Guardando…" : "Guardar comentario"}
+                          {commentSaving ? "Guardando…" : "Guardar nota"}
                         </Button>
                       </div>
                     </div>

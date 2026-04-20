@@ -360,7 +360,7 @@ export default function HomePage() {
   const [favoritesReorderSaving, setFavoritesReorderSaving] = React.useState(false);
 
   const [commentDraftByHospitalId, setCommentDraftByHospitalId] = React.useState<Record<string, string>>({});
-  const [commentLoadingId, setCommentLoadingId] = React.useState<string | null>(null);
+  const [commentLoadingId] = React.useState<string | null>(null);
   const [commentSavingId, setCommentSavingId] = React.useState<string | null>(null);
   const [commentErrorByHospitalId, setCommentErrorByHospitalId] = React.useState<Record<string, string | null>>({});
 
@@ -443,82 +443,48 @@ export default function HomePage() {
   }, [apiBase, extractApiErrorMessage]);
 
   React.useEffect(() => {
-    if (!favoritesEnabled) return;
-    if (!selectedHospitalId) return;
     if (!detailOpen) return;
-    const token = getAuthToken();
-    if (!token) return;
-
+    if (!selectedHospitalId) return;
+    if (!favoritesEnabled) return;
     const hospitalId = selectedHospitalId;
-    setCommentLoadingId(hospitalId);
     setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: null }));
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15_000);
-    fetch(`${apiBase}/comentarios/hospitales/${encodeURIComponent(hospitalId)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: controller.signal,
-    })
-      .then(async (r) => {
-        const body = await r.json().catch(() => null);
-        if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo cargar el comentario."));
-        const comment =
-          body && typeof body === "object" && typeof (body as Record<string, unknown>)["comment"] === "string"
-            ? String((body as Record<string, unknown>)["comment"])
-            : "";
-        setCommentDraftByHospitalId((prev) => {
-          if (prev[hospitalId] != null) return prev;
-          return { ...prev, [hospitalId]: comment };
-        });
-      })
-      .catch((e) => {
-        if (e && typeof e === "object" && "name" in e && e.name === "AbortError") {
-          setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: "Servicio lento. Buscar de nuevo." }));
-          return;
-        }
-        setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: e instanceof Error ? e.message : "No se pudo cargar el comentario." }));
-      })
-      .finally(() => {
-        clearTimeout(timeoutId);
-        setCommentLoadingId((cur) => (cur === hospitalId ? null : cur));
-      });
-
-    return () => {
-      clearTimeout(timeoutId);
-      controller.abort();
-    };
-  }, [apiBase, detailOpen, extractApiErrorMessage, favoritesEnabled, selectedHospitalId]);
+    setCommentDraftByHospitalId((prev) => {
+      if (prev[hospitalId] != null) return prev;
+      const fav = favorites.find((f) => f.item_type === "hospital" && f.item_id === hospitalId);
+      return { ...prev, [hospitalId]: extractNotes(fav?.meta) };
+    });
+  }, [detailOpen, extractNotes, favorites, favoritesEnabled, selectedHospitalId]);
 
   const saveHospitalComment = React.useCallback(
     async (hospitalId: string) => {
       const token = getAuthToken();
       if (!token) {
-        setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: "Inicia sesión para guardar comentarios." }));
+        openAuth("login");
         return;
       }
       const draft = commentDraftByHospitalId[hospitalId] ?? "";
       setCommentSavingId(hospitalId);
       setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: null }));
       try {
-        const r = await fetch(`${apiBase}/comentarios/hospitales/${encodeURIComponent(hospitalId)}`, {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-          body: JSON.stringify({ comment: draft }),
+        const existing = favorites.find((f) => f.item_type === "hospital" && f.item_id === hospitalId);
+        const baseMeta = existing && existing.meta && typeof existing.meta === "object" ? (existing.meta as Record<string, unknown>) : {};
+        const meta = { ...baseMeta, notes: draft };
+        const r = await fetch(`${apiBase}/favoritos`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ item_type: "hospital", item_id: hospitalId, meta }),
         });
         const body = await r.json().catch(() => null);
-        if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo guardar el comentario."));
-        const comment =
-          body && typeof body === "object" && typeof (body as Record<string, unknown>)["comment"] === "string"
-            ? String((body as Record<string, unknown>)["comment"])
-            : "";
-        setCommentDraftByHospitalId((p) => ({ ...p, [hospitalId]: comment }));
+        if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo guardar la nota."));
+        await refreshFavorites();
+        setCommentDraftByHospitalId((p) => ({ ...p, [hospitalId]: draft }));
       } catch (e) {
-        setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: e instanceof Error ? e.message : "No se pudo guardar el comentario." }));
+        setCommentErrorByHospitalId((p) => ({ ...p, [hospitalId]: e instanceof Error ? e.message : "No se pudo guardar la nota." }));
       } finally {
         setCommentSavingId((cur) => (cur === hospitalId ? null : cur));
       }
     },
-    [apiBase, commentDraftByHospitalId, extractApiErrorMessage],
+    [apiBase, commentDraftByHospitalId, extractApiErrorMessage, favorites, openAuth, refreshFavorites],
   );
 
   const extractNotes = React.useCallback((meta: unknown) => {
