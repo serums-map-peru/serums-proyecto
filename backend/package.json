@@ -11,6 +11,7 @@
     "import:offers": "node src/scripts/importSerumsOffersToDb.js",
     "import:lisa": "node src/scripts/importLisaCsvToDb.js",
     "geocode:db": "node src/scripts/geocodeHospitalsInDb.js",
+    "compare:gd5-med-2025i": "node src/scripts/compareGd5Med2025I.js",
     "seed:pg": "npm run import:db && npm run import:offers",
     "pg:push-sqlite": "node src/scripts/pushSqliteToPg.js"
   },
