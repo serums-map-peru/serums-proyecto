@@ -182,7 +182,7 @@ async function importOffersFromCsv({ csvPath, periodo, modalidad }) {
   let imported = 0;
   let skipped = 0;
   let missingHospitals = 0;
-  const records = [];
+  const aggregatedByKey = new Map();
 
   for (let i = headerRowIndex + 1; i < rows.length; i++) {
     const row = rows[i] || [];
@@ -203,8 +203,13 @@ async function importOffersFromCsv({ csvPath, periodo, modalidad }) {
       continue;
     }
 
-    records.push(
-      serumsOfferRepository.buildOfferRecord({
+    const key = `${hospitalId}::${String(profesion).toLowerCase()}`;
+    const prev = aggregatedByKey.get(key);
+    if (prev) {
+      prev.plazas += plazas;
+      if (!prev.sede_adjudicacion && sede) prev.sede_adjudicacion = sede;
+    } else {
+      aggregatedByKey.set(key, {
         hospital_id: hospitalId,
         codigo_renipress_modular: codigo,
         periodo,
@@ -212,10 +217,13 @@ async function importOffersFromCsv({ csvPath, periodo, modalidad }) {
         profesion,
         plazas,
         sede_adjudicacion: sede || null,
-      }),
-    );
+      });
+    }
     imported += 1;
   }
+
+  const records = [];
+  for (const v of aggregatedByKey.values()) records.push(serumsOfferRepository.buildOfferRecord(v));
 
   if (records.length > 0) await serumsOfferRepository.upsertOffers(records);
   return { imported, skipped, missingHospitals, path: resolvedPath, skippedFile: false };
