@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-type EncapsNoteIndex = { mtimeMs: number; byCode: Map<string, string> };
+type EncapsNoteIndex = { mtimeMs: number; byCode: Map<string, { nota: string; serumista: string }> };
 let encapsCache: EncapsNoteIndex | null = null;
 
 function dbPath() {
@@ -145,32 +145,45 @@ function loadEncapsNotes() {
     const headerIndex = buildHeaderIndex(headerRow);
     const idxCodigo = mustGetIndex(headerIndex, ["codigorenipress", "codigorenipressmodular", "renipress", "codigo"]);
     const idxNota = mustGetIndex(headerIndex, ["nota"]);
+    const idxSerumista = mustGetIndex(headerIndex, [
+      "apellidosynombres",
+      "apellidosynombre",
+      "apellidosnombres",
+      "nombresyapellidos",
+      "nombres",
+      "nombre",
+      "postulante",
+      "serumista",
+    ]);
 
-    const byCode = new Map<string, { bestStr: string; bestNum: number | null }>();
+    const byCode = new Map<string, { bestStr: string; bestNum: number | null; serumista: string }>();
     for (let i = headerRowIndex + 1; i < rows.length; i++) {
       const row = rows[i] || [];
       const codigo = idxCodigo != null && idxCodigo < row.length ? padIpressCode(row[idxCodigo]) : "";
       if (!codigo) continue;
       const notaRaw = idxNota != null && idxNota < row.length ? cleanString(row[idxNota]) : "";
       if (!notaRaw) continue;
+      const serumista = idxSerumista != null && idxSerumista < row.length ? cleanString(row[idxSerumista]) : "";
       const normalized = notaRaw.replace(",", ".");
       const n = Number.parseFloat(normalized);
       const noteNum = Number.isFinite(n) ? n : null;
       const prev = byCode.get(codigo);
       if (!prev) {
-        byCode.set(codigo, { bestStr: notaRaw, bestNum: noteNum });
+        byCode.set(codigo, { bestStr: notaRaw, bestNum: noteNum, serumista });
         continue;
       }
       if (noteNum != null && (prev.bestNum == null || noteNum > prev.bestNum)) {
         prev.bestNum = noteNum;
         prev.bestStr = notaRaw;
+        prev.serumista = serumista;
       } else if (prev.bestNum == null && noteNum == null && !prev.bestStr) {
         prev.bestStr = notaRaw;
+        prev.serumista = serumista;
       }
     }
 
-    const final = new Map<string, string>();
-    for (const [code, v] of byCode.entries()) final.set(code, v.bestStr);
+    const final = new Map<string, { nota: string; serumista: string }>();
+    for (const [code, v] of byCode.entries()) final.set(code, { nota: v.bestStr, serumista: v.serumista });
 
     encapsCache = { mtimeMs: stat.mtimeMs, byCode: final };
     return encapsCache;
@@ -180,7 +193,7 @@ function loadEncapsNotes() {
   }
 }
 
-function getEncapsNoteForHospitalCode(code: string) {
+function getEncapsInfoForHospitalCode(code: string) {
   const c = padIpressCode(code);
   if (!c) return null;
   const store = loadEncapsNotes();
@@ -264,6 +277,7 @@ export async function GET(
 
     const profesiones = safeJsonArray(row.profesiones_json);
     const imagenes = safeJsonArray(row.imagenes_json);
+    const encapsInfo = getEncapsInfoForHospitalCode(String(row.codigo_renipress_modular || row.id || ""));
 
     const base = {
       id: String(row.id || ""),
@@ -284,7 +298,8 @@ export async function GET(
       lng: Number(row.lng),
       imagenes: imagenes.length ? imagenes : undefined,
       coordenadas_fuente: row.coordenadas_fuente != null ? String(row.coordenadas_fuente) : undefined,
-      encaps_puntaje_2025_i: getEncapsNoteForHospitalCode(String(row.codigo_renipress_modular || row.id || "")),
+      encaps_puntaje_2025_i: encapsInfo?.nota || null,
+      encaps_serumista_2025_i: encapsInfo?.serumista || null,
     } as Record<string, unknown>;
 
     if (!tableExists(db, "serums_offers")) {

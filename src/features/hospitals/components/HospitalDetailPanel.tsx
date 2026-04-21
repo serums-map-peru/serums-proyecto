@@ -429,7 +429,6 @@ export function HospitalDetailPanel({
   const [dragHeightPx, setDragHeightPx] = React.useState<number | null>(null);
   const dragStartRef = React.useRef<{ startY: number; startHeight: number } | null>(null);
   const draggedRef = React.useRef(false);
-  const modeForSummary = activeTripMode ?? travelMode;
 
   const [originQuery, setOriginQuery] = React.useState("");
   const [originResults, setOriginResults] = React.useState<NominatimResult[]>([]);
@@ -588,19 +587,12 @@ export function HospitalDetailPanel({
     return { remunerado, equivalente };
   }, [hospital?.serums_resumen]);
 
-  const summaryMetric = React.useMemo(() => {
-    if (modeForSummary === "avion") {
-      const dist = airportDriveRoute ? formatDistance(airportDriveRoute.distancia) : "—";
-      const dur = airportDriveRoute ? formatDuration(airportDriveRoute.duracion) : "—";
-      return { primary: dur, secondary: dist, label: "Desde aeropuerto" };
-    }
-    const dur = route ? formatDuration(route.duracion) : "—";
-    const dist = route ? formatDistance(route.distancia) : directDistanceMeters != null ? formatDistance(directDistanceMeters) : "—";
-    return { primary: dur, secondary: dist, label: "Carro" };
-  }, [airportDriveRoute, directDistanceMeters, modeForSummary, route]);
-
   const encapsNote = hospital && typeof (hospital as { encaps_puntaje_2025_i?: unknown }).encaps_puntaje_2025_i === "string"
     ? String((hospital as { encaps_puntaje_2025_i?: unknown }).encaps_puntaje_2025_i || "").trim()
+    : "";
+
+  const encapsSerumista = hospital && typeof (hospital as { encaps_serumista_2025_i?: unknown }).encaps_serumista_2025_i === "string"
+    ? String((hospital as { encaps_serumista_2025_i?: unknown }).encaps_serumista_2025_i || "").trim()
     : "";
 
   const snapHeights = React.useMemo(() => {
@@ -722,12 +714,14 @@ export function HospitalDetailPanel({
                       SERUMS {serumsPeriodoLabel}
                     </div>
                   ) : null}
-                  <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
-                    {summaryMetric.primary} · {summaryMetric.secondary}
-                  </div>
                   {encapsNote ? (
                     <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
                       Puntaje ENCAPS 2025-I: {encapsNote}
+                    </div>
+                  ) : null}
+                  {encapsNote && encapsNote !== "-" && encapsSerumista ? (
+                    <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
+                      Serumista 2025-1: {toTitleCase(encapsSerumista)}
                     </div>
                   ) : null}
                 </div>
