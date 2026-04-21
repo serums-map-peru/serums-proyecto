@@ -714,16 +714,6 @@ export function HospitalDetailPanel({
                       SERUMS {serumsPeriodoLabel}
                     </div>
                   ) : null}
-                  {encapsNote ? (
-                    <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
-                      Puntaje ENCAPS 2025-I: {encapsNote}
-                    </div>
-                  ) : null}
-                  {encapsNote && encapsNote !== "-" && encapsSerumista ? (
-                    <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
-                      Serumista 2025-1: {toTitleCase(encapsSerumista)}
-                    </div>
-                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -979,6 +969,20 @@ export function HospitalDetailPanel({
                         <InfoRow label="GD" value={hospital.grado_dificultad || "—"} />
                         <InfoRow label="ZAF" value={hospital.zaf === "SI" ? "Sí" : "No"} />
                         <InfoRow label="ZE" value={hospital.ze === "SI" ? "Sí" : "No"} />
+                        {encapsNote || encapsSerumista ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {encapsNote ? (
+                              <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
+                                Puntaje ENCAPS 2025-I: {encapsNote}
+                              </div>
+                            ) : null}
+                            {encapsNote && encapsNote !== "-" && encapsSerumista ? (
+                              <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
+                                Serumista 2025-1: {toTitleCase(encapsSerumista)}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <InfoRow label="Plazas SERUMS disponibles" value={plazasSummary} />
                       </div>
                     </div>
