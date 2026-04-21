@@ -245,6 +245,125 @@ async function main() {
   const expectedOffersTotal = eq.total + rem.total;
   const expectedPlazasTotal = sumMapValues(expectedPlazasByCode);
 
+  const baseCsvEq = process.env.SERUMS_BASE_EQUIVALENTE_CSV_PATH
+    ? path.resolve(process.env.SERUMS_BASE_EQUIVALENTE_CSV_PATH)
+    : null;
+  const baseCsvRem = process.env.SERUMS_BASE_REMUNERADO_CSV_PATH
+    ? path.resolve(process.env.SERUMS_BASE_REMUNERADO_CSV_PATH)
+    : null;
+
+  if ((baseCsvEq && !baseCsvRem) || (!baseCsvEq && baseCsvRem)) {
+    throw new Error("Para comparar base vs nuevo, debes setear ambos: SERUMS_BASE_EQUIVALENTE_CSV_PATH y SERUMS_BASE_REMUNERADO_CSV_PATH");
+  }
+
+  if (baseCsvEq && baseCsvRem) {
+    if (!fs.existsSync(baseCsvEq)) throw new Error(`No existe CSV base equivalente: ${baseCsvEq}`);
+    if (!fs.existsSync(baseCsvRem)) throw new Error(`No existe CSV base remunerado: ${baseCsvRem}`);
+
+    const baseEq = readExpectedFromCsv(baseCsvEq, { profesion: profesionFilter, gd: gdFilter });
+    const baseRem = readExpectedFromCsv(baseCsvRem, { profesion: profesionFilter, gd: gdFilter });
+
+    const baseOffersByCode = new Map();
+    const basePlazasByCode = new Map();
+    const baseExamplesByCode = new Map();
+
+    for (const [code, n] of baseEq.offersByCode.entries()) baseOffersByCode.set(code, (baseOffersByCode.get(code) || 0) + n);
+    for (const [code, n] of baseRem.offersByCode.entries()) baseOffersByCode.set(code, (baseOffersByCode.get(code) || 0) + n);
+
+    for (const [code, n] of baseEq.plazasByCode.entries()) basePlazasByCode.set(code, (basePlazasByCode.get(code) || 0) + n);
+    for (const [code, n] of baseRem.plazasByCode.entries()) basePlazasByCode.set(code, (basePlazasByCode.get(code) || 0) + n);
+
+    for (const [code, ex] of baseEq.examplesByCode.entries()) if (!baseExamplesByCode.has(code)) baseExamplesByCode.set(code, ex);
+    for (const [code, ex] of baseRem.examplesByCode.entries()) if (!baseExamplesByCode.has(code)) baseExamplesByCode.set(code, ex);
+
+    const baseOffersTotal = baseEq.total + baseRem.total;
+    const basePlazasTotal = sumMapValues(basePlazasByCode);
+
+    const baseCodes = new Set(baseOffersByCode.keys());
+    const newCodes = new Set(expectedOffersByCode.keys());
+
+    const added = [];
+    const removed = [];
+    const changed = [];
+
+    for (const code of newCodes) {
+      if (!baseCodes.has(code)) {
+        added.push({
+          code,
+          ofertas: expectedOffersByCode.get(code) || 0,
+          plazas: expectedPlazasByCode.get(code) || 0,
+          ex: examplesByCode.get(code) || null,
+        });
+        continue;
+      }
+      const baseOf = baseOffersByCode.get(code) || 0;
+      const basePl = basePlazasByCode.get(code) || 0;
+      const nowOf = expectedOffersByCode.get(code) || 0;
+      const nowPl = expectedPlazasByCode.get(code) || 0;
+      const dOf = nowOf - baseOf;
+      const dPl = nowPl - basePl;
+      if (dOf !== 0 || dPl !== 0) {
+        changed.push({
+          code,
+          delta_ofertas: dOf,
+          delta_plazas: dPl,
+          base_ofertas: baseOf,
+          base_plazas: basePl,
+          nuevo_ofertas: nowOf,
+          nuevo_plazas: nowPl,
+          ex: examplesByCode.get(code) || baseExamplesByCode.get(code) || null,
+        });
+      }
+    }
+
+    for (const code of baseCodes) {
+      if (newCodes.has(code)) continue;
+      removed.push({
+        code,
+        ofertas: baseOffersByCode.get(code) || 0,
+        plazas: basePlazasByCode.get(code) || 0,
+        ex: baseExamplesByCode.get(code) || null,
+      });
+    }
+
+    added.sort((a, b) => b.plazas - a.plazas || b.ofertas - a.ofertas || a.code.localeCompare(b.code));
+    removed.sort((a, b) => b.plazas - a.plazas || b.ofertas - a.ofertas || a.code.localeCompare(b.code));
+    changed.sort(
+      (a, b) =>
+        Math.abs(b.delta_plazas) - Math.abs(a.delta_plazas) || Math.abs(b.delta_ofertas) - Math.abs(a.delta_ofertas) || a.code.localeCompare(b.code),
+    );
+
+    process.stdout.write(`\nComparacion CSV (base -> nuevo)\n`);
+    process.stdout.write(`Base ofertas filas: ${baseOffersTotal} | Base plazas: ${basePlazasTotal} | Base codigos: ${baseOffersByCode.size}\n`);
+    process.stdout.write(`Nuevo ofertas filas: ${expectedOffersTotal} | Nuevo plazas: ${expectedPlazasTotal} | Nuevo codigos: ${expectedOffersByCode.size}\n`);
+    process.stdout.write(`Codigos nuevos: ${added.length} | Codigos removidos: ${removed.length} | Codigos con cambios: ${changed.length}\n\n`);
+
+    for (const a of added.slice(0, 200)) {
+      const loc = a.ex ? `${a.ex.departamento} | ${a.ex.provincia} | ${a.ex.distrito}` : "";
+      const nom = a.ex ? a.ex.nombre : "";
+      process.stdout.write(`+ ${a.code} plazas=${a.plazas} filas=${a.ofertas} ${loc} ${nom}\n`);
+    }
+    if (added.length > 200) process.stdout.write(`... (${added.length - 200} codigos nuevos mas)\n`);
+
+    for (const r of removed.slice(0, 200)) {
+      const loc = r.ex ? `${r.ex.departamento} | ${r.ex.provincia} | ${r.ex.distrito}` : "";
+      const nom = r.ex ? r.ex.nombre : "";
+      process.stdout.write(`- ${r.code} plazas=${r.plazas} filas=${r.ofertas} ${loc} ${nom}\n`);
+    }
+    if (removed.length > 200) process.stdout.write(`... (${removed.length - 200} codigos removidos mas)\n`);
+
+    for (const c of changed.slice(0, 200)) {
+      const loc = c.ex ? `${c.ex.departamento} | ${c.ex.provincia} | ${c.ex.distrito}` : "";
+      const nom = c.ex ? c.ex.nombre : "";
+      process.stdout.write(
+        `~ ${c.code} dPl=${c.delta_plazas} dFilas=${c.delta_ofertas} base(pl=${c.base_plazas},filas=${c.base_ofertas}) nuevo(pl=${c.nuevo_plazas},filas=${c.nuevo_ofertas}) ${loc} ${nom}\n`,
+      );
+    }
+    if (changed.length > 200) process.stdout.write(`... (${changed.length - 200} codigos con cambios mas)\n`);
+
+    process.stdout.write("\n");
+  }
+
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("Falta DATABASE_URL en el entorno.");
 
