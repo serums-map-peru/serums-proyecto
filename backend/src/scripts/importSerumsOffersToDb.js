@@ -236,6 +236,8 @@ async function main() {
 
   await ensureHospitalsSeeded();
 
+  const repoDataPath = (name) => path.resolve(__dirname, "..", "data", "serums_offers", name);
+
   const sources = [
     {
       periodo: "2025-I",
@@ -260,6 +262,18 @@ async function main() {
       modalidad: "equivalente",
       pathKey: "SERUMS_2025_II_EQUIVALENTE_CSV_PATH",
       defaultPath: path.resolve(__dirname, "../../../../oferta-de-plazas-serums-2025-ii-equivalente.csv"),
+    },
+    {
+      periodo: "2026-I",
+      modalidad: "remunerado",
+      pathKey: "SERUMS_2026_I_REMUNERADO_CSV_PATH",
+      defaultPath: repoDataPath("2026-i-remunerado.csv"),
+    },
+    {
+      periodo: "2026-I",
+      modalidad: "equivalente",
+      pathKey: "SERUMS_2026_I_EQUIVALENTE_CSV_PATH",
+      defaultPath: repoDataPath("2026-i-equivalente.csv"),
     },
   ];
 
