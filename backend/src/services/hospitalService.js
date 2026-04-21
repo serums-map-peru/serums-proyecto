@@ -1067,6 +1067,16 @@ function loadEncapsNotas2025I() {
     const headerIndex = buildHeaderIndex(headerRow);
     const idxCodigo = mustGetIndex(headerIndex, ["codigorenipress", "codigorenipressmodular", "renipress", "codigo"]);
     const idxNota = mustGetIndex(headerIndex, ["nota"]);
+    const idxSerumista = mustGetIndex(headerIndex, [
+      "apellidosynombres",
+      "apellidosynombre",
+      "apellidosnombres",
+      "nombresyapellidos",
+      "nombres",
+      "nombre",
+      "postulante",
+      "serumista",
+    ]);
 
     const bestByCode = new Map();
     for (let i = headerRowIndex + 1; i < rows.length; i++) {
@@ -1075,6 +1085,7 @@ function loadEncapsNotas2025I() {
       if (!codigo) continue;
       const notaRaw = typeof idxNota === "number" && idxNota < row.length ? cleanString(row[idxNota]) : "";
       if (!notaRaw) continue;
+      const serumista = typeof idxSerumista === "number" && idxSerumista < row.length ? cleanString(row[idxSerumista]) : "";
 
       const normalized = String(notaRaw).replace(",", ".");
       const n = Number.parseFloat(normalized);
@@ -1082,17 +1093,18 @@ function loadEncapsNotas2025I() {
 
       const prev = bestByCode.get(codigo);
       if (!prev) {
-        bestByCode.set(codigo, { bestStr: notaRaw, bestNum: noteNum });
+        bestByCode.set(codigo, { bestStr: notaRaw, bestNum: noteNum, serumista });
         continue;
       }
       if (noteNum != null && (prev.bestNum == null || noteNum > prev.bestNum)) {
         prev.bestNum = noteNum;
         prev.bestStr = notaRaw;
+        prev.serumista = serumista;
       }
     }
 
     const byCode = new Map();
-    for (const [code, v] of bestByCode.entries()) byCode.set(code, v.bestStr);
+    for (const [code, v] of bestByCode.entries()) byCode.set(code, { nota: v.bestStr, serumista: v.serumista });
 
     encapsNotasCache = { mtimeMs: stat.mtimeMs, byCode };
     return encapsNotasCache;
@@ -1102,7 +1114,7 @@ function loadEncapsNotas2025I() {
   }
 }
 
-function getEncapsNota2025IForHospital(hospital) {
+function getEncapsInfo2025IForHospital(hospital) {
   const code = hospital && hospital.codigo_renipress_modular ? padIpressCode(hospital.codigo_renipress_modular) : "";
   if (!code) return null;
   const store = loadEncapsNotas2025I();
@@ -1369,12 +1381,16 @@ async function getHospitalById(id) {
     hospital = store.records.find((h) => String(h && h.codigo_renipress_modular ? h.codigo_renipress_modular : "").trim() === key);
   }
   if (!hospital) throw new HttpError(404, "Hospital no encontrado");
-  const encaps_puntaje_2025_i = getEncapsNota2025IForHospital(hospital);
-  if (!DB_ENABLED) return { ...hospital, encaps_puntaje_2025_i };
+
+  const encapsInfo = getEncapsInfo2025IForHospital(hospital);
+  const encaps_puntaje_2025_i = encapsInfo ? encapsInfo.nota : null;
+  const encaps_serumista_2025_i = encapsInfo ? encapsInfo.serumista : null;
+
+  if (!DB_ENABLED) return { ...hospital, encaps_puntaje_2025_i, encaps_serumista_2025_i };
 
   const offers = await serumsOfferRepository.listOffersByHospitalId(hospital.id);
   const resumen = summarizeOffers(offers);
-  return { ...hospital, encaps_puntaje_2025_i, serums_ofertas: offers, serums_resumen: resumen };
+  return { ...hospital, encaps_puntaje_2025_i, encaps_serumista_2025_i, serums_ofertas: offers, serums_resumen: resumen };
 }
 
 async function geocodeHospitalById(id, { force = false } = {}) {
