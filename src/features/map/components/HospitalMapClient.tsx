@@ -22,6 +22,7 @@ export type HospitalMapProps = {
   focusNearbyId?: string | null;
   nearbyLoading?: boolean;
   focus: { lat: number; lng: number; zoom?: number } | null;
+  serumsPeriodoLabel?: string | null;
 };
 
 function formatAccuracy(meters: number) {
@@ -302,10 +303,12 @@ function ClusteredHospitalsLayer({
   hospitals,
   selectedHospitalId,
   onSelectHospital,
+  serumsPeriodoLabel,
 }: {
   hospitals: HospitalMapItem[];
   selectedHospitalId: string | null;
   onSelectHospital: (hospital: HospitalMapItem) => void;
+  serumsPeriodoLabel?: string | null;
 }) {
   const map = useMap();
   const clusterRef = React.useRef<L.MarkerClusterGroup | null>(null);
@@ -417,14 +420,20 @@ function ClusteredHospitalsLayer({
     const catRaw = String(h.categoria || "").trim();
     const categoria = catRaw && catRaw !== "0" ? catRaw : "";
     const meta = [profesion, categoria].filter((x) => String(x || "").trim() !== "").join(" · ");
+    const periodo = String(serumsPeriodoLabel || "").trim();
     return `
       <div style="display:grid;gap:4px;min-width:180px">
         <div style="font-weight:650;font-size:14px;color:rgba(29,29,31,0.92)">${escapeHtml(toTitleCase(h.nombre_establecimiento) || "—")}</div>
+        ${
+          periodo
+            ? `<div style="font-weight:650;font-size:11px;color:rgba(59,130,246,0.95);text-transform:uppercase;letter-spacing:0.02em">SERUMS ${escapeHtml(periodo)}</div>`
+            : ""
+        }
         <div style="font-weight:520;font-size:12px;color:rgba(134,134,139,0.95)">${escapeHtml(meta || "—")}</div>
         <div style="font-weight:520;font-size:12px;color:rgba(134,134,139,0.95)">${escapeHtml(h.departamento || "—")} · ${escapeHtml(h.provincia || "—")} · ${escapeHtml(h.distrito || "—")}</div>
       </div>
     `;
-  }, []);
+  }, [serumsPeriodoLabel]);
 
   React.useEffect(() => {
     const cluster = clusterRef.current;
@@ -513,6 +522,7 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
   focusNearbyId = null,
   nearbyLoading = false,
   focus,
+  serumsPeriodoLabel = null,
 }: HospitalMapProps) {
 
   const routeLatLngs = React.useMemo(() => {
@@ -652,6 +662,7 @@ const HospitalMapClient = React.memo(function HospitalMapClient({
           hospitals={hospitals}
           selectedHospitalId={selectedHospitalId}
           onSelectHospital={onSelectHospital}
+          serumsPeriodoLabel={serumsPeriodoLabel}
         />
 
         {nearbyPlaces && nearbyPlaces.length > 0

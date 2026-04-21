@@ -16,6 +16,7 @@ export type HospitalDetailPanelProps = {
   error?: string | null;
   open: boolean;
   onClose: () => void;
+  serumsPeriodoLabel?: string | null;
   canCorrectLocation?: boolean;
   authRole?: "admin" | "user" | null;
   route?: RouteResponse | null;
@@ -364,6 +365,7 @@ export function HospitalDetailPanel({
   error = null,
   open,
   onClose,
+  serumsPeriodoLabel = null,
   canCorrectLocation = false,
   authRole = null,
   route = null,
@@ -711,6 +713,11 @@ export function HospitalDetailPanel({
                   {hospital ? fullLocation : "Haz clic en un marcador del mapa."}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {serumsPeriodoLabel ? (
+                    <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
+                      SERUMS {serumsPeriodoLabel}
+                    </div>
+                  ) : null}
                   <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
                     {summaryMetric.primary} · {summaryMetric.secondary}
                   </div>

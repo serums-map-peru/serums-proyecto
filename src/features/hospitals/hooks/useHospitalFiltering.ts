@@ -13,7 +13,7 @@ export function createInitialHospitalFilters(): HospitalFilters {
     categoria: [],
     zaf: null,
     ze: null,
-    serums_periodo: "2025-I",
+    serums_periodo: "2026-I",
     serums_modalidad: null,
     airport_hours_max: null,
   };
@@ -126,11 +126,13 @@ export function useHospitalFiltering() {
     setLoading(true);
     setError(null);
 
-    fetchHospitalsMap("", controller.signal)
+    const initialQs = buildHospitalQuery(createInitialHospitalFilters());
+
+    fetchHospitalsMap(initialQs, controller.signal)
       .then((data) => {
         setAllHospitals(data);
         setHospitals(data);
-        return fetchFacets("", controller.signal)
+        return fetchFacets(initialQs, controller.signal)
           .then((f) => {
             setOptions(f);
             setLoading(false);

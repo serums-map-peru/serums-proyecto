@@ -742,6 +742,11 @@ export function FiltersBar({
                       {h.distrito} · {h.provincia} · {h.departamento}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[var(--label)]">
+                      {filters.serums_periodo ? (
+                        <span className="rounded-full bg-white px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+                          SERUMS {filters.serums_periodo}
+                        </span>
+                      ) : null}
                       {h.categoria && String(h.categoria).trim() !== "0" ? (
                         <span className="rounded-full bg-white px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.04)]">{h.categoria}</span>
                       ) : null}

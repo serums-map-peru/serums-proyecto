@@ -2110,6 +2110,7 @@ export default function HomePage() {
               nearbyLoading={nearbyLoading}
               focus={focus}
               onSelectHospital={handleSelectHospital}
+              serumsPeriodoLabel={filters.serums_periodo}
             />
 
             <div className="absolute right-3 top-3 z-[1200] hidden sm:block">
@@ -2281,6 +2282,7 @@ export default function HomePage() {
           setSelectedNearbyId(null);
           setFocusNearbyId(null);
         }}
+        serumsPeriodoLabel={filters.serums_periodo}
         route={
           activeTrip && selectedHospital && activeTrip.hospitalId === selectedHospital.id && activeTrip.mode !== "avion"
             ? route
