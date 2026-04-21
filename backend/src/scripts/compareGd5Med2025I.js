@@ -118,7 +118,18 @@ function mustGetIndex(headerIndex, keys, label) {
   throw new Error(`CSV no contiene columna requerida: ${label}`);
 }
 
+function normalizeAll(value) {
+  const s = cleanString(value);
+  if (!s) return null;
+  const upper = s.toUpperCase();
+  if (upper === "ALL" || upper === "*" || upper === "TODOS") return null;
+  return s;
+}
+
 function readExpectedFromCsv(csvPath, { profesion, gd }) {
+  const profesionFilter = normalizeAll(profesion);
+  const gdFilter = normalizeAll(gd);
+
   const raw = fs.readFileSync(csvPath, "utf8");
   const rows = parseDelimited(raw, ";");
   if (!rows.length) return { offersByCode: new Map(), plazasByCode: new Map(), examplesByCode: new Map(), total: 0 };
@@ -156,8 +167,8 @@ function readExpectedFromCsv(csvPath, { profesion, gd }) {
     const plazas = idxPlazas < row.length ? parseIntOrZero(row[idxPlazas]) : 0;
 
     if (!codigo) continue;
-    if (prof.toLowerCase() !== profesion.toLowerCase()) continue;
-    if (grado.toUpperCase() !== gd.toUpperCase()) continue;
+    if (profesionFilter && prof.toLowerCase() !== profesionFilter.toLowerCase()) continue;
+    if (gdFilter && grado.toUpperCase() !== gdFilter.toUpperCase()) continue;
 
     offersByCode.set(codigo, (offersByCode.get(codigo) || 0) + 1);
     plazasByCode.set(codigo, (plazasByCode.get(codigo) || 0) + (plazas > 0 ? plazas : 0));
@@ -187,8 +198,10 @@ function getDefaultCsvPath(name) {
 
 async function main() {
   const periodo = process.env.PERIODO || "2025-I";
-  const profesion = process.env.PROFESION || "Medicina";
-  const gd = process.env.GD || "GD-5";
+  const profesion = process.env.PROFESION || "ALL";
+  const gd = process.env.GD || "ALL";
+  const profesionFilter = normalizeAll(profesion);
+  const gdFilter = normalizeAll(gd);
 
   const csvEqEnv = process.env.SERUMS_2025_I_EQUIVALENTE_CSV_PATH;
   const csvRemEnv = process.env.SERUMS_2025_I_REMUNERADO_CSV_PATH;
@@ -210,10 +223,10 @@ async function main() {
   if (csvRem && !fs.existsSync(csvRem)) throw new Error(`No existe CSV remunerado: ${csvRem}`);
 
   const eq = csvEq
-    ? readExpectedFromCsv(csvEq, { profesion, gd })
+    ? readExpectedFromCsv(csvEq, { profesion: profesionFilter, gd: gdFilter })
     : { offersByCode: new Map(), plazasByCode: new Map(), examplesByCode: new Map(), total: 0 };
   const rem = csvRem
-    ? readExpectedFromCsv(csvRem, { profesion, gd })
+    ? readExpectedFromCsv(csvRem, { profesion: profesionFilter, gd: gdFilter })
     : { offersByCode: new Map(), plazasByCode: new Map(), examplesByCode: new Map(), total: 0 };
 
   const expectedOffersByCode = new Map();
@@ -238,6 +251,21 @@ async function main() {
   const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
   await client.connect();
 
+  const where = [
+    "o.periodo::text ILIKE $1::text",
+    "h.codigo_renipress_modular IS NOT NULL",
+    "LENGTH(TRIM(h.codigo_renipress_modular::text)) > 0",
+  ];
+  const params = [periodo];
+  if (profesionFilter) {
+    where.push(`o.profesion::text ILIKE $${params.length + 1}::text`);
+    params.push(profesionFilter);
+  }
+  if (gdFilter) {
+    where.push(`h.grado_dificultad::text ILIKE $${params.length + 1}::text`);
+    params.push(gdFilter);
+  }
+
   const have = await client.query(
     `
       SELECT
@@ -246,14 +274,10 @@ async function main() {
         COALESCE(SUM(o.plazas),0) AS plazas
       FROM serums_offers o
       JOIN hospitals h ON h.id = o.hospital_id
-      WHERE o.periodo::text ILIKE $1::text
-        AND o.profesion::text ILIKE $2::text
-        AND h.grado_dificultad::text ILIKE $3::text
-        AND h.codigo_renipress_modular IS NOT NULL
-        AND LENGTH(TRIM(h.codigo_renipress_modular::text)) > 0
+      WHERE ${where.join("\n        AND ")}
       GROUP BY 1
     `,
-    [periodo, profesion, gd],
+    params,
   );
 
   const haveOffersByCode = new Map();
@@ -288,7 +312,7 @@ async function main() {
   const haveOffersTotal = sumMapValues(haveOffersByCode);
   const havePlazasTotal = sumMapValues(havePlazasByCode);
 
-  process.stdout.write(`Periodo=${periodo} Profesion=${profesion} GD=${gd}\n`);
+  process.stdout.write(`Periodo=${periodo} Profesion=${profesionFilter || "ALL"} GD=${gdFilter || "ALL"}\n`);
   process.stdout.write(`CSV esperado (ofertas): ${expectedOffersTotal}\n`);
   process.stdout.write(`CSV esperado (plazas):  ${expectedPlazasTotal}\n`);
   process.stdout.write(`DB cargado (ofertas):   ${haveOffersTotal}\n`);
@@ -333,4 +357,3 @@ main().catch((e) => {
   process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
   process.exit(1);
 });
-
