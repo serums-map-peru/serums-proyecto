@@ -252,6 +252,11 @@ async function main() {
     ? path.resolve(process.env.SERUMS_BASE_REMUNERADO_CSV_PATH)
     : null;
 
+  const summaryOnly = ["1", "true", "yes"].includes(String(process.env.SUMMARY_ONLY || "").toLowerCase());
+  const baseListLimit = Number.isFinite(Number(process.env.BASE_LIST_LIMIT)) ? Number(process.env.BASE_LIST_LIMIT) : 200;
+
+  let baseAddedCodes = null;
+
   if ((baseCsvEq && !baseCsvRem) || (!baseCsvEq && baseCsvRem)) {
     throw new Error("Para comparar base vs nuevo, debes setear ambos: SERUMS_BASE_EQUIVALENTE_CSV_PATH y SERUMS_BASE_REMUNERADO_CSV_PATH");
   }
@@ -333,35 +338,39 @@ async function main() {
         Math.abs(b.delta_plazas) - Math.abs(a.delta_plazas) || Math.abs(b.delta_ofertas) - Math.abs(a.delta_ofertas) || a.code.localeCompare(b.code),
     );
 
+    baseAddedCodes = added.map((a) => a.code);
+
     process.stdout.write(`\nComparacion CSV (base -> nuevo)\n`);
     process.stdout.write(`Base ofertas filas: ${baseOffersTotal} | Base plazas: ${basePlazasTotal} | Base codigos: ${baseOffersByCode.size}\n`);
     process.stdout.write(`Nuevo ofertas filas: ${expectedOffersTotal} | Nuevo plazas: ${expectedPlazasTotal} | Nuevo codigos: ${expectedOffersByCode.size}\n`);
     process.stdout.write(`Codigos nuevos: ${added.length} | Codigos removidos: ${removed.length} | Codigos con cambios: ${changed.length}\n\n`);
 
-    for (const a of added.slice(0, 200)) {
-      const loc = a.ex ? `${a.ex.departamento} | ${a.ex.provincia} | ${a.ex.distrito}` : "";
-      const nom = a.ex ? a.ex.nombre : "";
-      process.stdout.write(`+ ${a.code} plazas=${a.plazas} filas=${a.ofertas} ${loc} ${nom}\n`);
-    }
-    if (added.length > 200) process.stdout.write(`... (${added.length - 200} codigos nuevos mas)\n`);
+    if (!summaryOnly && baseListLimit > 0) {
+      for (const a of added.slice(0, baseListLimit)) {
+        const loc = a.ex ? `${a.ex.departamento} | ${a.ex.provincia} | ${a.ex.distrito}` : "";
+        const nom = a.ex ? a.ex.nombre : "";
+        process.stdout.write(`+ ${a.code} plazas=${a.plazas} filas=${a.ofertas} ${loc} ${nom}\n`);
+      }
+      if (added.length > baseListLimit) process.stdout.write(`... (${added.length - baseListLimit} codigos nuevos mas)\n`);
 
-    for (const r of removed.slice(0, 200)) {
-      const loc = r.ex ? `${r.ex.departamento} | ${r.ex.provincia} | ${r.ex.distrito}` : "";
-      const nom = r.ex ? r.ex.nombre : "";
-      process.stdout.write(`- ${r.code} plazas=${r.plazas} filas=${r.ofertas} ${loc} ${nom}\n`);
-    }
-    if (removed.length > 200) process.stdout.write(`... (${removed.length - 200} codigos removidos mas)\n`);
+      for (const r of removed.slice(0, baseListLimit)) {
+        const loc = r.ex ? `${r.ex.departamento} | ${r.ex.provincia} | ${r.ex.distrito}` : "";
+        const nom = r.ex ? r.ex.nombre : "";
+        process.stdout.write(`- ${r.code} plazas=${r.plazas} filas=${r.ofertas} ${loc} ${nom}\n`);
+      }
+      if (removed.length > baseListLimit) process.stdout.write(`... (${removed.length - baseListLimit} codigos removidos mas)\n`);
 
-    for (const c of changed.slice(0, 200)) {
-      const loc = c.ex ? `${c.ex.departamento} | ${c.ex.provincia} | ${c.ex.distrito}` : "";
-      const nom = c.ex ? c.ex.nombre : "";
-      process.stdout.write(
-        `~ ${c.code} dPl=${c.delta_plazas} dFilas=${c.delta_ofertas} base(pl=${c.base_plazas},filas=${c.base_ofertas}) nuevo(pl=${c.nuevo_plazas},filas=${c.nuevo_ofertas}) ${loc} ${nom}\n`,
-      );
-    }
-    if (changed.length > 200) process.stdout.write(`... (${changed.length - 200} codigos con cambios mas)\n`);
+      for (const c of changed.slice(0, baseListLimit)) {
+        const loc = c.ex ? `${c.ex.departamento} | ${c.ex.provincia} | ${c.ex.distrito}` : "";
+        const nom = c.ex ? c.ex.nombre : "";
+        process.stdout.write(
+          `~ ${c.code} dPl=${c.delta_plazas} dFilas=${c.delta_ofertas} base(pl=${c.base_plazas},filas=${c.base_ofertas}) nuevo(pl=${c.nuevo_plazas},filas=${c.nuevo_ofertas}) ${loc} ${nom}\n`,
+        );
+      }
+      if (changed.length > baseListLimit) process.stdout.write(`... (${changed.length - baseListLimit} codigos con cambios mas)\n`);
 
-    process.stdout.write("\n");
+      process.stdout.write("\n");
+    }
   }
 
   const url = process.env.DATABASE_URL;
@@ -369,6 +378,21 @@ async function main() {
 
   const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
   await client.connect();
+
+  if (baseAddedCodes && baseAddedCodes.length > 0) {
+    const existing = await client.query(
+      `
+        SELECT DISTINCT LPAD(regexp_replace(codigo_renipress_modular::text, '[^0-9]', '', 'g'), 8, '0') AS code
+        FROM hospitals
+        WHERE codigo_renipress_modular IS NOT NULL
+          AND LPAD(regexp_replace(codigo_renipress_modular::text, '[^0-9]', '', 'g'), 8, '0') = ANY($1::text[])
+      `,
+      [baseAddedCodes],
+    );
+    const have = new Set(existing.rows.map((r) => String(r.code)));
+    const missingCount = baseAddedCodes.length - have.size;
+    process.stdout.write(`Puntos nuevos (vs base) que faltan agregar en hospitals: ${missingCount}\n\n`);
+  }
 
   const where = [
     "o.periodo::text ILIKE $1::text",
