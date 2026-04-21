@@ -359,6 +359,45 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
+function Tag({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "rounded-full px-3 py-1.5 text-xs font-semibold",
+        className || "bg-black/[0.03] text-[var(--title)]",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function institutionTagClass(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "bg-black/[0.03] text-[var(--title)]";
+  const key = raw
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (key.includes("minsa") || key.includes("gobierno regional")) return "bg-amber-300 text-black";
+  if (key.includes("essalud") || key.includes("es salud") || key.includes("es-salud")) return "bg-sky-300 text-black";
+  if (
+    key.includes("ffaa") ||
+    key.includes("ff.aa") ||
+    key.includes("fuerzas armadas") ||
+    key.includes("pnp") ||
+    key.includes("ejercito") ||
+    key.includes("marina") ||
+    key.includes("fap")
+  ) {
+    return "bg-emerald-600 text-white";
+  }
+  return "bg-red-600 text-white";
+}
+
 export function HospitalDetailPanel({
   hospital,
   loading = false,
@@ -965,21 +1004,23 @@ export function HospitalDetailPanel({
                       <div className="grid gap-3">
                         <InfoRow label="Ubicación" value={fullLocation || "—"} />
                         <InfoRow label="Profesión requerida" value={profesion} />
-                        <InfoRow label="Institución" value={hospital.institucion || "—"} />
-                        <InfoRow label="GD" value={hospital.grado_dificultad || "—"} />
-                        <InfoRow label="ZAF" value={hospital.zaf === "SI" ? "Sí" : "No"} />
-                        <InfoRow label="ZE" value={hospital.ze === "SI" ? "Sí" : "No"} />
+                        <div className="flex flex-wrap items-center gap-2">
+                          {hospital.institucion ? <Tag className={institutionTagClass(hospital.institucion)}>{hospital.institucion}</Tag> : null}
+                          {hospital.grado_dificultad ? <Tag>{hospital.grado_dificultad}</Tag> : null}
+                          <Tag className={hospital.zaf === "SI" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}>
+                            ZAF: {hospital.zaf === "SI" ? "Sí" : "No"}
+                          </Tag>
+                          <Tag className={hospital.ze === "SI" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}>
+                            ZE: {hospital.ze === "SI" ? "Sí" : "No"}
+                          </Tag>
+                        </div>
                         {encapsNote || encapsSerumista ? (
                           <div className="flex flex-wrap items-center gap-2">
                             {encapsNote ? (
-                              <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
-                                Puntaje ENCAPS 2025-I: {encapsNote}
-                              </div>
+                              <Tag>Puntaje ENCAPS 2025-I: {encapsNote}</Tag>
                             ) : null}
                             {encapsNote && encapsNote !== "-" && encapsSerumista ? (
-                              <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
-                                Serumista 2025-1: {toTitleCase(encapsSerumista)}
-                              </div>
+                              <Tag>Serumista 2025-1: {toTitleCase(encapsSerumista)}</Tag>
                             ) : null}
                           </div>
                         ) : null}
