@@ -5,14 +5,186 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+type EncapsNoteIndex = { mtimeMs: number; byCode: Map<string, string> };
+let encapsCache: EncapsNoteIndex | null = null;
+
 function dbPath() {
   return path.join(process.cwd(), "backend", "src", "data", "serums.db");
+}
+
+function encapsCsvPath() {
+  return path.join(process.cwd(), "backend", "src", "data", "serums_offers", "Notas-Serums-2025-1.csv");
 }
 
 function openDb() {
   const p = dbPath();
   if (!fs.existsSync(p)) return null;
   return new DatabaseSync(p);
+}
+
+function cleanString(value: unknown) {
+  if (value == null) return "";
+  return String(value)
+    .replace(/\uFEFF/g, "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeKey(value: unknown) {
+  return cleanString(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function parseDelimited(text: string, delimiter: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        const next = text[i + 1];
+        if (next === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+
+    if (ch === delimiter) {
+      row.push(field);
+      field = "";
+      continue;
+    }
+
+    if (ch === "\n") {
+      row.push(field);
+      field = "";
+      rows.push(row);
+      row = [];
+      continue;
+    }
+
+    if (ch === "\r") continue;
+    field += ch;
+  }
+
+  row.push(field);
+  rows.push(row);
+  return rows;
+}
+
+function padIpressCode(value: unknown) {
+  const raw = cleanString(value);
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.padStart(8, "0");
+}
+
+function findHeaderRowIndex(rows: string[][]) {
+  for (let i = 0; i < rows.length; i++) {
+    for (const cell of rows[i] || []) {
+      const k = normalizeKey(cell);
+      if (k === "profesion" || k.startsWith("profes")) return i;
+    }
+  }
+  return -1;
+}
+
+function buildHeaderIndex(headerRow: string[]) {
+  const index = new Map<string, number>();
+  for (let i = 0; i < headerRow.length; i++) {
+    const k = normalizeKey(headerRow[i]);
+    if (!k) continue;
+    if (!index.has(k)) index.set(k, i);
+  }
+  return index;
+}
+
+function mustGetIndex(headerIndex: Map<string, number>, keys: string[]) {
+  for (const k of keys) {
+    const idx = headerIndex.get(k);
+    if (typeof idx === "number") return idx;
+  }
+  return null;
+}
+
+function loadEncapsNotes() {
+  const p = encapsCsvPath();
+  try {
+    const stat = fs.statSync(p);
+    if (encapsCache && encapsCache.mtimeMs === stat.mtimeMs) return encapsCache;
+
+    const raw = fs.readFileSync(p, "utf8");
+    const rows = parseDelimited(raw, ";");
+    const headerRowIndex = findHeaderRowIndex(rows);
+    if (headerRowIndex < 0) {
+      encapsCache = { mtimeMs: stat.mtimeMs, byCode: new Map() };
+      return encapsCache;
+    }
+
+    const headerRow = (rows[headerRowIndex] || []).map((c) => cleanString(c));
+    const headerIndex = buildHeaderIndex(headerRow);
+    const idxCodigo = mustGetIndex(headerIndex, ["codigorenipress", "codigorenipressmodular", "renipress", "codigo"]);
+    const idxNota = mustGetIndex(headerIndex, ["nota"]);
+
+    const byCode = new Map<string, { bestStr: string; bestNum: number | null }>();
+    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const codigo = idxCodigo != null && idxCodigo < row.length ? padIpressCode(row[idxCodigo]) : "";
+      if (!codigo) continue;
+      const notaRaw = idxNota != null && idxNota < row.length ? cleanString(row[idxNota]) : "";
+      if (!notaRaw) continue;
+      const normalized = notaRaw.replace(",", ".");
+      const n = Number.parseFloat(normalized);
+      const noteNum = Number.isFinite(n) ? n : null;
+      const prev = byCode.get(codigo);
+      if (!prev) {
+        byCode.set(codigo, { bestStr: notaRaw, bestNum: noteNum });
+        continue;
+      }
+      if (noteNum != null && (prev.bestNum == null || noteNum > prev.bestNum)) {
+        prev.bestNum = noteNum;
+        prev.bestStr = notaRaw;
+      } else if (prev.bestNum == null && noteNum == null && !prev.bestStr) {
+        prev.bestStr = notaRaw;
+      }
+    }
+
+    const final = new Map<string, string>();
+    for (const [code, v] of byCode.entries()) final.set(code, v.bestStr);
+
+    encapsCache = { mtimeMs: stat.mtimeMs, byCode: final };
+    return encapsCache;
+  } catch {
+    encapsCache = { mtimeMs: 0, byCode: new Map() };
+    return encapsCache;
+  }
+}
+
+function getEncapsNoteForHospitalCode(code: string) {
+  const c = padIpressCode(code);
+  if (!c) return null;
+  const store = loadEncapsNotes();
+  return store.byCode.get(c) || null;
 }
 
 function safeJsonArray(value: unknown): string[] {
@@ -112,6 +284,7 @@ export async function GET(
       lng: Number(row.lng),
       imagenes: imagenes.length ? imagenes : undefined,
       coordenadas_fuente: row.coordenadas_fuente != null ? String(row.coordenadas_fuente) : undefined,
+      encaps_puntaje_2025_i: getEncapsNoteForHospitalCode(String(row.codigo_renipress_modular || row.id || "")),
     } as Record<string, unknown>;
 
     if (!tableExists(db, "serums_offers")) {

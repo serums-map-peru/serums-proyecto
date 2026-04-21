@@ -17,6 +17,7 @@ export type Hospital = {
   lng: number;
   imagenes?: string[];
   coordenadas_fuente?: string;
+  encaps_puntaje_2025_i?: string | null;
   serums_ofertas?: SerumsOffer[];
   serums_resumen?: SerumsOfferSummary[];
 };

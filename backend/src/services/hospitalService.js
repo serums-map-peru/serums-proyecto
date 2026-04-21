@@ -1010,6 +1010,105 @@ async function loadHospitalsFromCsv() {
   return cached;
 }
 
+const ENCAPS_NOTAS_2025_I_CSV_PATH = path.resolve(__dirname, "../data/serums_offers/Notas-Serums-2025-1.csv");
+let encapsNotasCache = null;
+
+function normalizeKey(value) {
+  return cleanString(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function findHeaderRowIndex(rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    for (const cell of row) {
+      const k = normalizeKey(cell);
+      if (k === "profesion" || k.startsWith("profes")) return i;
+    }
+  }
+  return -1;
+}
+
+function buildHeaderIndex(headerRow) {
+  const index = new Map();
+  for (let i = 0; i < headerRow.length; i++) {
+    const k = normalizeKey(headerRow[i]);
+    if (!k) continue;
+    if (!index.has(k)) index.set(k, i);
+  }
+  return index;
+}
+
+function mustGetIndex(headerIndex, keys) {
+  for (const k of keys) {
+    const idx = headerIndex.get(k);
+    if (typeof idx === "number") return idx;
+  }
+  return null;
+}
+
+function loadEncapsNotas2025I() {
+  try {
+    const stat = fs.statSync(ENCAPS_NOTAS_2025_I_CSV_PATH);
+    if (encapsNotasCache && encapsNotasCache.mtimeMs === stat.mtimeMs) return encapsNotasCache;
+
+    const raw = fs.readFileSync(ENCAPS_NOTAS_2025_I_CSV_PATH, "utf8");
+    const rows = parseDelimited(raw, ";");
+    const headerRowIndex = findHeaderRowIndex(rows);
+    if (headerRowIndex < 0) {
+      encapsNotasCache = { mtimeMs: stat.mtimeMs, byCode: new Map() };
+      return encapsNotasCache;
+    }
+
+    const headerRow = rows[headerRowIndex].map(cleanString);
+    const headerIndex = buildHeaderIndex(headerRow);
+    const idxCodigo = mustGetIndex(headerIndex, ["codigorenipress", "codigorenipressmodular", "renipress", "codigo"]);
+    const idxNota = mustGetIndex(headerIndex, ["nota"]);
+
+    const bestByCode = new Map();
+    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const codigo = typeof idxCodigo === "number" && idxCodigo < row.length ? padIpressCode(row[idxCodigo]) : "";
+      if (!codigo) continue;
+      const notaRaw = typeof idxNota === "number" && idxNota < row.length ? cleanString(row[idxNota]) : "";
+      if (!notaRaw) continue;
+
+      const normalized = String(notaRaw).replace(",", ".");
+      const n = Number.parseFloat(normalized);
+      const noteNum = Number.isFinite(n) ? n : null;
+
+      const prev = bestByCode.get(codigo);
+      if (!prev) {
+        bestByCode.set(codigo, { bestStr: notaRaw, bestNum: noteNum });
+        continue;
+      }
+      if (noteNum != null && (prev.bestNum == null || noteNum > prev.bestNum)) {
+        prev.bestNum = noteNum;
+        prev.bestStr = notaRaw;
+      }
+    }
+
+    const byCode = new Map();
+    for (const [code, v] of bestByCode.entries()) byCode.set(code, v.bestStr);
+
+    encapsNotasCache = { mtimeMs: stat.mtimeMs, byCode };
+    return encapsNotasCache;
+  } catch {
+    encapsNotasCache = { mtimeMs: 0, byCode: new Map() };
+    return encapsNotasCache;
+  }
+}
+
+function getEncapsNota2025IForHospital(hospital) {
+  const code = hospital && hospital.codigo_renipress_modular ? padIpressCode(hospital.codigo_renipress_modular) : "";
+  if (!code) return null;
+  const store = loadEncapsNotas2025I();
+  return store.byCode.get(code) || null;
+}
+
 function bumpDbHospitalsRevision() {
   dbHospitalsRevision += 1;
   dbHospitalsCache = null;
@@ -1270,11 +1369,12 @@ async function getHospitalById(id) {
     hospital = store.records.find((h) => String(h && h.codigo_renipress_modular ? h.codigo_renipress_modular : "").trim() === key);
   }
   if (!hospital) throw new HttpError(404, "Hospital no encontrado");
-  if (!DB_ENABLED) return hospital;
+  const encaps_puntaje_2025_i = getEncapsNota2025IForHospital(hospital);
+  if (!DB_ENABLED) return { ...hospital, encaps_puntaje_2025_i };
 
   const offers = await serumsOfferRepository.listOffersByHospitalId(hospital.id);
   const resumen = summarizeOffers(offers);
-  return { ...hospital, serums_ofertas: offers, serums_resumen: resumen };
+  return { ...hospital, encaps_puntaje_2025_i, serums_ofertas: offers, serums_resumen: resumen };
 }
 
 async function geocodeHospitalById(id, { force = false } = {}) {

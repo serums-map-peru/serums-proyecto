@@ -599,6 +599,10 @@ export function HospitalDetailPanel({
     return { primary: dur, secondary: dist, label: "Carro" };
   }, [airportDriveRoute, directDistanceMeters, modeForSummary, route]);
 
+  const encapsNote = hospital && typeof (hospital as { encaps_puntaje_2025_i?: unknown }).encaps_puntaje_2025_i === "string"
+    ? String((hospital as { encaps_puntaje_2025_i?: unknown }).encaps_puntaje_2025_i || "").trim()
+    : "";
+
   const snapHeights = React.useMemo(() => {
     const vh = viewportHeight || 0;
     const min = Math.round(vh * 0.25);
@@ -721,9 +725,11 @@ export function HospitalDetailPanel({
                   <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
                     {summaryMetric.primary} · {summaryMetric.secondary}
                   </div>
-                  <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-medium text-[var(--label)]">
-                    {summaryMetric.label}
-                  </div>
+                  {encapsNote ? (
+                    <div className="rounded-full bg-black/[0.03] px-3 py-1.5 text-xs font-semibold text-[var(--title)]">
+                      Puntaje ENCAPS 2025-I: {encapsNote}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-2">
