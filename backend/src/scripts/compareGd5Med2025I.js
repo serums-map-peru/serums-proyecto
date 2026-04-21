@@ -190,18 +190,31 @@ async function main() {
   const profesion = process.env.PROFESION || "Medicina";
   const gd = process.env.GD || "GD-5";
 
-  const csvEq = process.env.SERUMS_2025_I_EQUIVALENTE_CSV_PATH
-    ? path.resolve(process.env.SERUMS_2025_I_EQUIVALENTE_CSV_PATH)
-    : getDefaultCsvPath("2025-i-equivalente.csv");
-  const csvRem = process.env.SERUMS_2025_I_REMUNERADO_CSV_PATH
-    ? path.resolve(process.env.SERUMS_2025_I_REMUNERADO_CSV_PATH)
-    : getDefaultCsvPath("2025-i-remunerado.csv");
+  const csvEqEnv = process.env.SERUMS_2025_I_EQUIVALENTE_CSV_PATH;
+  const csvRemEnv = process.env.SERUMS_2025_I_REMUNERADO_CSV_PATH;
 
-  if (!fs.existsSync(csvEq)) throw new Error(`No existe CSV equivalente: ${csvEq}`);
-  if (!fs.existsSync(csvRem)) throw new Error(`No existe CSV remunerado: ${csvRem}`);
+  const csvEq = csvEqEnv && ["SKIP", "NONE"].includes(String(csvEqEnv).toUpperCase())
+    ? null
+    : csvEqEnv
+      ? path.resolve(csvEqEnv)
+      : getDefaultCsvPath("2025-i-equivalente.csv");
 
-  const eq = readExpectedFromCsv(csvEq, { profesion, gd });
-  const rem = readExpectedFromCsv(csvRem, { profesion, gd });
+  const csvRem = csvRemEnv && ["SKIP", "NONE"].includes(String(csvRemEnv).toUpperCase())
+    ? null
+    : csvRemEnv
+      ? path.resolve(csvRemEnv)
+      : getDefaultCsvPath("2025-i-remunerado.csv");
+
+  if (!csvEq && !csvRem) throw new Error("Debes proveer al menos un CSV (equivalente o remunerado). Puedes usar SKIP/NONE para omitir uno.");
+  if (csvEq && !fs.existsSync(csvEq)) throw new Error(`No existe CSV equivalente: ${csvEq}`);
+  if (csvRem && !fs.existsSync(csvRem)) throw new Error(`No existe CSV remunerado: ${csvRem}`);
+
+  const eq = csvEq
+    ? readExpectedFromCsv(csvEq, { profesion, gd })
+    : { offersByCode: new Map(), plazasByCode: new Map(), examplesByCode: new Map(), total: 0 };
+  const rem = csvRem
+    ? readExpectedFromCsv(csvRem, { profesion, gd })
+    : { offersByCode: new Map(), plazasByCode: new Map(), examplesByCode: new Map(), total: 0 };
 
   const expectedOffersByCode = new Map();
   const expectedPlazasByCode = new Map();
