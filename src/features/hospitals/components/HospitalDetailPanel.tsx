@@ -363,8 +363,8 @@ function Tag({ children, className }: { children: React.ReactNode; className?: s
   return (
     <div
       className={cn(
-        "rounded-full px-3 py-1.5 text-xs font-semibold",
-        className || "bg-black/[0.03] text-[var(--title)]",
+        "rounded-full border px-3 py-1.5 text-xs font-semibold",
+        className || "border-black/5 bg-black/[0.03] text-[var(--title)]",
       )}
     >
       {children}
@@ -374,7 +374,7 @@ function Tag({ children, className }: { children: React.ReactNode; className?: s
 
 function institutionTagClass(value: string) {
   const raw = String(value || "").trim();
-  if (!raw) return "bg-black/[0.03] text-[var(--title)]";
+  if (!raw) return "border-black/5 bg-black/[0.03] text-[var(--title)]";
   const key = raw
     .toLowerCase()
     .normalize("NFD")
@@ -382,8 +382,8 @@ function institutionTagClass(value: string) {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (key.includes("minsa") || key.includes("gobierno regional")) return "bg-amber-300 text-black";
-  if (key.includes("essalud") || key.includes("es salud") || key.includes("es-salud")) return "bg-sky-300 text-black";
+  if (key.includes("minsa") || key.includes("gobierno regional")) return "border-amber-200/60 bg-amber-100 text-amber-900";
+  if (key.includes("essalud") || key.includes("es salud") || key.includes("es-salud")) return "border-sky-200/60 bg-sky-100 text-sky-900";
   if (
     key.includes("ffaa") ||
     key.includes("ff.aa") ||
@@ -393,9 +393,9 @@ function institutionTagClass(value: string) {
     key.includes("marina") ||
     key.includes("fap")
   ) {
-    return "bg-emerald-600 text-white";
+    return "border-emerald-200/60 bg-emerald-100 text-emerald-900";
   }
-  return "bg-red-600 text-white";
+  return "border-red-200/60 bg-red-100 text-red-900";
 }
 
 export function HospitalDetailPanel({
@@ -1007,10 +1007,10 @@ export function HospitalDetailPanel({
                         <div className="flex flex-wrap items-center gap-2">
                           {hospital.institucion ? <Tag className={institutionTagClass(hospital.institucion)}>{hospital.institucion}</Tag> : null}
                           {hospital.grado_dificultad ? <Tag>{hospital.grado_dificultad}</Tag> : null}
-                          <Tag className={hospital.zaf === "SI" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}>
+                          <Tag className={hospital.zaf === "SI" ? "border-emerald-200/60 bg-emerald-100 text-emerald-900" : "border-red-200/60 bg-red-100 text-red-900"}>
                             ZAF: {hospital.zaf === "SI" ? "Sí" : "No"}
                           </Tag>
-                          <Tag className={hospital.ze === "SI" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}>
+                          <Tag className={hospital.ze === "SI" ? "border-emerald-200/60 bg-emerald-100 text-emerald-900" : "border-red-200/60 bg-red-100 text-red-900"}>
                             ZE: {hospital.ze === "SI" ? "Sí" : "No"}
                           </Tag>
                         </div>
