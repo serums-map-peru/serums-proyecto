@@ -20,6 +20,37 @@ type Options = {
   categorias: FacetGroup;
 };
 
+function sameStringSet(a: string[] | null | undefined, b: string[] | null | undefined) {
+  const aa = Array.isArray(a) ? a : [];
+  const bb = Array.isArray(b) ? b : [];
+  if (aa.length !== bb.length) return false;
+  const sa = aa.slice().sort((x, y) => x.localeCompare(y));
+  const sb = bb.slice().sort((x, y) => x.localeCompare(y));
+  for (let i = 0; i < sa.length; i++) {
+    if (sa[i] !== sb[i]) return false;
+  }
+  return true;
+}
+
+function sameScalar(a: unknown, b: unknown) {
+  return (a ?? null) === (b ?? null);
+}
+
+function areHospitalFiltersEquivalent(a: HospitalFilters, b: HospitalFilters) {
+  return (
+    sameScalar(a.profesion, b.profesion) &&
+    sameStringSet(a.institucion, b.institucion) &&
+    sameStringSet(a.departamento, b.departamento) &&
+    sameStringSet(a.grado_dificultad, b.grado_dificultad) &&
+    sameStringSet(a.categoria, b.categoria) &&
+    sameScalar(a.zaf, b.zaf) &&
+    sameScalar(a.ze, b.ze) &&
+    sameScalar(a.serums_periodo, b.serums_periodo) &&
+    sameScalar(a.serums_modalidad, b.serums_modalidad) &&
+    sameScalar(a.airport_hours_max ?? null, b.airport_hours_max ?? null)
+  );
+}
+
 export type FiltersBarProps = {
   filters: HospitalFilters;
   setFilters: React.Dispatch<React.SetStateAction<HospitalFilters>>;
@@ -212,6 +243,7 @@ export function FiltersBar({
 }: FiltersBarProps) {
   const [locationOpen, setLocationOpen] = React.useState(false);
   const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [draftFilters, setDraftFilters] = React.useState<HospitalFilters>(filters);
 
   const [departmentSearch, setDepartmentSearch] = React.useState<string>("");
 
@@ -317,28 +349,25 @@ export function FiltersBar({
   }, [selectedDepartamentos]);
 
   React.useEffect(() => {
-    const next = Array.isArray(filters.departamento) ? filters.departamento : [];
-    selectedDepartamentosRef.current = next;
-    setSelectedDepartamentos(next);
-  }, [filters.departamento]);
+    setDraftFilters(filters);
+    const nextDept = Array.isArray(filters.departamento) ? filters.departamento : [];
+    const nextInst = Array.isArray(filters.institucion) ? filters.institucion : [];
+    const nextGd = Array.isArray(filters.grado_dificultad) ? filters.grado_dificultad : [];
+    const nextCat = Array.isArray(filters.categoria) ? filters.categoria : [];
+    selectedDepartamentosRef.current = nextDept;
+    selectedInstitucionesRef.current = nextInst;
+    selectedGdRef.current = nextGd;
+    selectedCategoriasRef.current = nextCat;
+    setSelectedDepartamentos(nextDept);
+    setSelectedInstituciones(nextInst);
+    setSelectedGd(nextGd);
+    setSelectedCategorias(nextCat);
+  }, [filters]);
 
-  React.useEffect(() => {
-    const next = Array.isArray(filters.institucion) ? filters.institucion : [];
-    selectedInstitucionesRef.current = next;
-    setSelectedInstituciones(next);
-  }, [filters.institucion]);
+  const isDirty = React.useMemo(() => {
+    return !areHospitalFiltersEquivalent(filters, draftFilters);
+  }, [filters, draftFilters]);
 
-  React.useEffect(() => {
-    const next = Array.isArray(filters.grado_dificultad) ? filters.grado_dificultad : [];
-    selectedGdRef.current = next;
-    setSelectedGd(next);
-  }, [filters.grado_dificultad]);
-
-  React.useEffect(() => {
-    const next = Array.isArray(filters.categoria) ? filters.categoria : [];
-    selectedCategoriasRef.current = next;
-    setSelectedCategorias(next);
-  }, [filters.categoria]);
   const toggleMulti = React.useCallback((prev: string[], value: string) => {
     return prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value];
   }, []);
@@ -350,20 +379,37 @@ export function FiltersBar({
           <div className="text-base font-semibold text-[var(--title)]">Filtros</div>
           <div className="mt-0.5 text-xs font-medium text-[var(--label)]">Selecciona múltiples opciones.</div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             size="sm"
             variant="secondary"
             onClick={() => {
-              setFilters(createInitialHospitalFilters());
+              const next = createInitialHospitalFilters();
+              setFilters(next);
+              setDraftFilters(next);
               setDepartmentSearch("");
               setSelectedDepartamentos([]);
               setSelectedInstituciones([]);
               setSelectedGd([]);
               setSelectedCategorias([]);
+              selectedDepartamentosRef.current = [];
+              selectedInstitucionesRef.current = [];
+              selectedGdRef.current = [];
+              selectedCategoriasRef.current = [];
             }}
           >
             Limpiar
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="!bg-[var(--medical-blue)] !text-white active:!bg-[var(--secondary)] active:!text-[var(--secondary-foreground)]"
+            disabled={!isDirty}
+            onClick={() => {
+              setFilters(draftFilters);
+            }}
+          >
+            Aplicar
           </Button>
           {onCloseMobile ? (
             <Button size="sm" variant="secondary" onClick={onCloseMobile} aria-label="Cerrar">
@@ -390,8 +436,10 @@ export function FiltersBar({
                     <AppleCheckbox
                       key={p}
                       label={p}
-                      checked={filters.profesion === p}
-                      onChange={() => setFilters((prev) => ({ ...prev, profesion: prev.profesion === p ? null : p }))}
+                      checked={draftFilters.profesion === p}
+                      onChange={() =>
+                        setDraftFilters((prev) => ({ ...prev, profesion: prev.profesion === p ? null : p }))
+                      }
                     />
                   ))}
                 </div>
@@ -419,9 +467,12 @@ export function FiltersBar({
                   <AppleCheckbox
                     key={m.value}
                     label={m.label}
-                    checked={filters.serums_modalidad === m.value}
+                    checked={draftFilters.serums_modalidad === m.value}
                     onChange={() =>
-                      setFilters((prev) => ({ ...prev, serums_modalidad: prev.serums_modalidad === m.value ? null : m.value }))
+                      setDraftFilters((prev) => ({
+                        ...prev,
+                        serums_modalidad: prev.serums_modalidad === m.value ? null : m.value,
+                      }))
                     }
                   />
                 ))}
@@ -486,7 +537,7 @@ export function FiltersBar({
                             }
                             selectedDepartamentosRef.current = next;
                             setSelectedDepartamentos(next);
-                            setFilters((p) => ({ ...p, departamento: next }));
+                            setDraftFilters((p) => ({ ...p, departamento: next }));
                           }}
                         />
                       );
@@ -558,7 +609,7 @@ export function FiltersBar({
                               const next = toggleMulti(selectedInstitucionesRef.current, i);
                               selectedInstitucionesRef.current = next;
                               setSelectedInstituciones(next);
-                              setFilters((prev) => ({ ...prev, institucion: next }));
+                              setDraftFilters((prev) => ({ ...prev, institucion: next }));
                             }}
                           />
                         );
@@ -579,7 +630,7 @@ export function FiltersBar({
                         const next = toggleMulti(selectedGdRef.current, gd);
                         selectedGdRef.current = next;
                         setSelectedGd(next);
-                        setFilters((prev) => ({ ...prev, grado_dificultad: next }));
+                        setDraftFilters((prev) => ({ ...prev, grado_dificultad: next }));
                       }}
                     />
                   ))}
@@ -597,7 +648,7 @@ export function FiltersBar({
                         const next = toggleMulti(selectedCategoriasRef.current, c);
                         selectedCategoriasRef.current = next;
                         setSelectedCategorias(next);
-                        setFilters((prev) => ({ ...prev, categoria: next }));
+                        setDraftFilters((prev) => ({ ...prev, categoria: next }));
                       }}
                     />
                   ))}
