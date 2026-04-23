@@ -2204,7 +2204,6 @@ export default function HomePage() {
                   results={hospitalsForMapAfterLegend}
                   selectedHospitalId={selectedHospitalId}
                   onSelectHospital={handleSelectHospital}
-                  userLocation={userLocation}
                 />
               </div>
 
@@ -2257,7 +2256,6 @@ export default function HomePage() {
                   results={hospitalsForMapAfterLegend}
                   selectedHospitalId={selectedHospitalId}
                   onSelectHospital={handleSelectHospital}
-                  userLocation={userLocation}
                   onCloseMobile={() => setSidebarOpen(false)}
                 />
               </div>

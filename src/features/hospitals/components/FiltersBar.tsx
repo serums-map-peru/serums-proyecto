@@ -27,7 +27,6 @@ export type FiltersBarProps = {
   results: HospitalMapItem[];
   selectedHospitalId: string | null;
   onSelectHospital: (hospital: HospitalMapItem) => void;
-  userLocation: { lat: number; lng: number; accuracy?: number | null } | null;
   onCloseMobile?: () => void;
 };
 
@@ -110,24 +109,6 @@ function AppleCheckbox({
       </div>
     </button>
   );
-}
-
-function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371000;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLon = ((b.lng - a.lng) * Math.PI) / 180;
-  const lat1 = (a.lat * Math.PI) / 180;
-  const lat2 = (b.lat * Math.PI) / 180;
-  const s1 = Math.sin(dLat / 2);
-  const s2 = Math.sin(dLon / 2);
-  const h = s1 * s1 + Math.cos(lat1) * Math.cos(lat2) * s2 * s2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-function formatDistance(meters: number) {
-  if (!Number.isFinite(meters)) return "—";
-  if (meters < 1000) return `${Math.round(meters)} m`;
-  return `${(meters / 1000).toFixed(1)} km`;
 }
 
 function toTitleCase(value: string) {
@@ -220,23 +201,6 @@ function abbreviateInstitutionForFilter(value: string) {
   return { label: full, title: undefined };
 }
 
-function institutionAccentColor(institucion: string) {
-  const v = normalizeInstitution(institucion);
-  if (v.includes("essalud")) return "#38BDF8";
-  if (v.includes("minsa")) return "#FBBF24";
-  if (
-    v.includes("ffaa") ||
-    v.includes("ff.aa") ||
-    v.includes("fuerza aerea") ||
-    v.includes("aerea del peru") ||
-    v.includes("marina") ||
-    v.includes("policia") ||
-    v.includes("ejercito")
-  )
-    return "#22C55E";
-  return "#EF4444";
-}
-
 export function FiltersBar({
   filters,
   setFilters,
@@ -244,12 +208,10 @@ export function FiltersBar({
   results,
   selectedHospitalId,
   onSelectHospital,
-  userLocation,
   onCloseMobile,
 }: FiltersBarProps) {
   const [locationOpen, setLocationOpen] = React.useState(false);
   const [filtersOpen, setFiltersOpen] = React.useState(false);
-  const [airportOpen, setAirportOpen] = React.useState(false);
 
   const [departmentSearch, setDepartmentSearch] = React.useState<string>("");
 
@@ -349,9 +311,6 @@ export function FiltersBar({
     Array.isArray(filters.categoria) ? filters.categoria : [],
   );
   const selectedCategoriasRef = React.useRef<string[]>(selectedCategorias);
-  const [selectedAirportDistance, setSelectedAirportDistance] = React.useState<string[]>(
-    [],
-  );
 
   const selectedDepartamentoKeys = React.useMemo(() => {
     return new Set(selectedDepartamentos.map(normalizeDepartamentoKey));
@@ -380,20 +339,6 @@ export function FiltersBar({
     selectedCategoriasRef.current = next;
     setSelectedCategorias(next);
   }, [filters.categoria]);
-
-  React.useEffect(() => {
-    if (!selectedAirportDistance.length) {
-      setFilters((prev) => ({ ...prev, airport_hours_max: null }));
-      return;
-    }
-    const toHours = (s: string) => {
-      const m = s.match(/<(\d+)h/);
-      return m ? Number(m[1]) : null;
-    };
-    const hours = selectedAirportDistance.map(toHours).filter((n): n is number => Number.isFinite(n));
-    const minH = hours.length ? Math.min(...hours) : null;
-    setFilters((prev) => ({ ...prev, airport_hours_max: minH }));
-  }, [selectedAirportDistance, setFilters]);
   const toggleMulti = React.useCallback((prev: string[], value: string) => {
     return prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value];
   }, []);
@@ -416,7 +361,6 @@ export function FiltersBar({
               setSelectedInstituciones([]);
               setSelectedGd([]);
               setSelectedCategorias([]);
-              setSelectedAirportDistance([]);
             }}
           >
             Limpiar
@@ -659,117 +603,6 @@ export function FiltersBar({
                   ))}
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="rounded-[var(--radius-panel)] bg-white px-3 py-2 shadow-[var(--shadow-soft)]">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between gap-3 px-2 py-2"
-              onClick={() => setAirportOpen((v) => !v)}
-              aria-expanded={airportOpen}
-            >
-              <div className="grid gap-0.5 text-left">
-                <SectionTitle>Distancia al aeropuerto</SectionTitle>
-                <div className="text-xs font-medium text-[var(--label)]">Tiempo de manejo</div>
-              </div>
-              <div className="text-[var(--label)]">
-                <SectionChevron open={airportOpen} />
-              </div>
-            </button>
-            <div
-              className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
-              style={{ maxHeight: airportOpen ? 320 : 0, opacity: airportOpen ? 1 : 0 }}
-            >
-              <div className="grid gap-1 px-1 pb-2">
-                {["<1h", "<2h", "<3h", "<4h"].map((o) => (
-                  <AppleCheckbox
-                    key={o}
-                    label={o}
-                    checked={selectedAirportDistance.includes(o)}
-                    onChange={() => setSelectedAirportDistance((p) => toggleMulti(p, o))}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[var(--radius-panel)] bg-white px-5 py-4 shadow-[var(--shadow-soft)]">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-xs font-medium text-[var(--label)]">Cerca de ti</div>
-                <div className="text-sm font-semibold text-[var(--title)]">Establecimientos más cercanos</div>
-              </div>
-            </div>
-
-            <div className="mt-3 grid gap-2">
-              {results.slice(0, 5).map((h) => {
-                const distance =
-                  userLocation && Number.isFinite(h.lat) && Number.isFinite(h.lng)
-                    ? haversineMeters(userLocation, { lat: h.lat, lng: h.lng })
-                    : null;
-                const isSelected = selectedHospitalId === h.id;
-                const accent = institutionAccentColor(h.institucion);
-                return (
-                  <button
-                    key={h.id}
-                    type="button"
-                    onClick={() => onSelectHospital(h)}
-                    className={cn(
-                      "relative w-full overflow-hidden rounded-[var(--radius-card)] bg-white px-4 py-3 text-left shadow-[var(--shadow-soft)] transition-[background-color,box-shadow] duration-200 ease-out",
-                      isSelected
-                        ? "bg-[var(--background-secondary)] shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
-                        : "hover:bg-[var(--background-secondary)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)]",
-                    )}
-                  >
-                    <div className="absolute left-0 top-0 h-full w-1.5" style={{ background: accent }} aria-hidden="true" />
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 line-clamp-2 text-sm font-semibold leading-snug text-[var(--title)]">
-                        {toTitleCase(h.nombre_establecimiento)}
-                      </div>
-                      <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-[var(--label)] shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                          <path
-                            d="M20.3 7.6a4.6 4.6 0 0 0-6.5 0L12 9.4l-1.8-1.8a4.6 4.6 0 0 0-6.5 6.5l1.8 1.8L12 21l6.5-5.1 1.8-1.8a4.6 4.6 0 0 0 0-6.5Z"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="mt-0.5 line-clamp-1 text-xs font-medium text-[var(--label)]">
-                      {h.distrito} · {h.provincia} · {h.departamento}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[var(--label)]">
-                      {filters.serums_periodo ? (
-                        <span className="rounded-full bg-white px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                          SERUMS {filters.serums_periodo}
-                        </span>
-                      ) : null}
-                      {h.categoria && String(h.categoria).trim() !== "0" ? (
-                        <span className="rounded-full bg-white px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.04)]">{h.categoria}</span>
-                      ) : null}
-                      {h.grado_dificultad ? (
-                        <span className="rounded-full bg-white px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                          {h.grado_dificultad}
-                        </span>
-                      ) : null}
-                      {h.zaf === "SI" ? (
-                        <span className="rounded-full bg-white px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.04)]">ZAF</span>
-                      ) : null}
-                      {h.ze === "SI" ? (
-                        <span className="rounded-full bg-white px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.04)]">ZE</span>
-                      ) : null}
-                      {distance != null ? (
-                        <span className="rounded-full bg-white px-2 py-1 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                          {formatDistance(distance)}
-                        </span>
-                      ) : null}
-                    </div>
-                  </button>
-                );
-              })}
             </div>
           </div>
         </div>
