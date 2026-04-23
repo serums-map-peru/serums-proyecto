@@ -1011,7 +1011,9 @@ async function loadHospitalsFromCsv() {
 }
 
 const ENCAPS_NOTAS_2025_I_CSV_PATH = path.resolve(__dirname, "../data/serums_offers/Notas-Serums-2025-1.csv");
+const SERUMISTAS_2025_I_CSV_PATH = path.resolve(__dirname, "../data/serums_offers/serumistas-2025-1.csv");
 let encapsNotasCache = null;
+let serumistas2025ICache = null;
 
 function normalizeKey(value) {
   return cleanString(value)
@@ -1048,6 +1050,50 @@ function mustGetIndex(headerIndex, keys) {
     if (typeof idx === "number") return idx;
   }
   return null;
+}
+
+function normalizeTextKey(value) {
+  return cleanString(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizePeriodKey(value) {
+  const raw = cleanString(value);
+  if (!raw) return "";
+  const m = raw.match(/(\d{4})\s*[-/._]?\s*(I{1,3}|IV|V|VI|1|2|3)/i);
+  if (!m) return raw;
+  const year = m[1];
+  const token = String(m[2] || "").toUpperCase();
+  const term =
+    token === "1" || token === "I"
+      ? "I"
+      : token === "2" || token === "II"
+        ? "II"
+        : token === "3" || token === "III"
+          ? "III"
+          : token;
+  return `${year}-${term}`;
+}
+
+function normalizeModalidadKey(value) {
+  const k = normalizeTextKey(value);
+  if (!k) return "";
+  if (k.includes("remuner")) return "remunerado";
+  if (k.includes("equival")) return "equivalente";
+  return k;
+}
+
+function normalizeProfesionKey(value) {
+  const k = normalizeTextKey(value);
+  if (!k) return "";
+  return k
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function loadEncapsNotas2025I() {
@@ -1119,6 +1165,135 @@ function getEncapsInfo2025IForHospital(hospital) {
   if (!code) return null;
   const store = loadEncapsNotas2025I();
   return store.byCode.get(code) || null;
+}
+
+function loadSerumistas2025I() {
+  const pickPath = () => {
+    try {
+      if (fs.existsSync(SERUMISTAS_2025_I_CSV_PATH)) return SERUMISTAS_2025_I_CSV_PATH;
+    } catch {
+    }
+    try {
+      if (fs.existsSync(ENCAPS_NOTAS_2025_I_CSV_PATH)) return ENCAPS_NOTAS_2025_I_CSV_PATH;
+    } catch {
+    }
+    return SERUMISTAS_2025_I_CSV_PATH;
+  };
+
+  const p = pickPath();
+  try {
+    const stat = fs.statSync(p);
+    if (serumistas2025ICache && serumistas2025ICache.mtimeMs === stat.mtimeMs && serumistas2025ICache.path === p) {
+      return serumistas2025ICache;
+    }
+
+    const raw = fs.readFileSync(p, "utf8");
+    const rows = parseDelimited(raw, ";");
+    const headerRowIndex = findHeaderRowIndex(rows);
+    if (headerRowIndex < 0) {
+      serumistas2025ICache = { mtimeMs: stat.mtimeMs, path: p, byCode: new Map(), bestByCode: new Map() };
+      return serumistas2025ICache;
+    }
+
+    const headerRow = rows[headerRowIndex].map(cleanString);
+    const headerIndex = buildHeaderIndex(headerRow);
+    const idxCodigo = mustGetIndex(headerIndex, ["codigorenipress", "codigorenipressmodular", "renipress", "codigo", "codigo_renipress"]);
+    const idxProfesion = mustGetIndex(headerIndex, ["profesion", "profesiones"]);
+    const idxModalidad = mustGetIndex(headerIndex, ["modalidad"]);
+    const idxSerumista = mustGetIndex(headerIndex, ["serumista", "apellidosynombres", "apellidosnombres", "nombresyapellidos", "postulante", "nombre"]);
+    const idxNota = mustGetIndex(headerIndex, ["nota", "puntaje", "puntajeencaps"]);
+    const idxPeriodo = mustGetIndex(headerIndex, ["periodo", "periodoacademico"]);
+
+    const byCode = new Map();
+    const bestByCode = new Map();
+
+    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const codigo = typeof idxCodigo === "number" && idxCodigo < row.length ? padIpressCode(row[idxCodigo]) : "";
+      if (!codigo) continue;
+
+      const profesionRaw = typeof idxProfesion === "number" && idxProfesion < row.length ? cleanString(row[idxProfesion]) : "";
+      const modalidadRaw = typeof idxModalidad === "number" && idxModalidad < row.length ? cleanString(row[idxModalidad]) : "";
+      const serumista = typeof idxSerumista === "number" && idxSerumista < row.length ? cleanString(row[idxSerumista]) : "";
+      const notaRaw = typeof idxNota === "number" && idxNota < row.length ? cleanString(row[idxNota]) : "";
+      const periodoRaw = typeof idxPeriodo === "number" && idxPeriodo < row.length ? cleanString(row[idxPeriodo]) : "";
+
+      if (!serumista && !notaRaw) continue;
+
+      const periodoKey = normalizePeriodKey(periodoRaw);
+      const modalidadKey = normalizeModalidadKey(modalidadRaw);
+      const profesionKey = normalizeProfesionKey(profesionRaw);
+
+      const groupKey = `${periodoKey}::${modalidadKey}::${profesionKey}`;
+      const codeGroups = byCode.get(codigo) || new Map();
+      if (!byCode.has(codigo)) byCode.set(codigo, codeGroups);
+
+      const group = codeGroups.get(groupKey) || {
+        periodo: periodoRaw || periodoKey || null,
+        modalidad: modalidadRaw || modalidadKey || null,
+        profesion: profesionRaw || profesionKey || null,
+        entries: [],
+      };
+      if (!codeGroups.has(groupKey)) codeGroups.set(groupKey, group);
+
+      const entryKey = `${normalizeTextKey(serumista)}::${cleanString(notaRaw)}`;
+      if (!group.__seen) group.__seen = new Set();
+      if (!group.__seen.has(entryKey)) {
+        group.__seen.add(entryKey);
+        group.entries.push({ serumista, nota: notaRaw || null });
+      }
+
+      const normalized = String(notaRaw).replace(",", ".");
+      const n = Number.parseFloat(normalized);
+      const noteNum = Number.isFinite(n) ? n : null;
+      const prevBest = bestByCode.get(codigo);
+      if (!prevBest) {
+        bestByCode.set(codigo, { bestStr: notaRaw, bestNum: noteNum, serumista });
+      } else if (noteNum != null && (prevBest.bestNum == null || noteNum > prevBest.bestNum)) {
+        prevBest.bestNum = noteNum;
+        prevBest.bestStr = notaRaw;
+        prevBest.serumista = serumista;
+      } else if (prevBest.bestNum == null && noteNum == null && !prevBest.bestStr && notaRaw) {
+        prevBest.bestStr = notaRaw;
+        prevBest.serumista = serumista;
+      }
+    }
+
+    const finalByCode = new Map();
+    for (const [code, groups] of byCode.entries()) {
+      const list = Array.from(groups.values()).map((g) => {
+        const entries = Array.isArray(g.entries) ? g.entries : [];
+        entries.sort((a, b) => String(a?.serumista || "").localeCompare(String(b?.serumista || ""), "es-PE"));
+        return { periodo: g.periodo, modalidad: g.modalidad, profesion: g.profesion, entries };
+      });
+      list.sort((a, b) => {
+        const p = String(b.periodo || "").localeCompare(String(a.periodo || ""));
+        if (p !== 0) return p;
+        const m = String(a.modalidad || "").localeCompare(String(b.modalidad || ""));
+        if (m !== 0) return m;
+        return String(a.profesion || "").localeCompare(String(b.profesion || ""));
+      });
+      finalByCode.set(code, list);
+    }
+
+    const finalBestByCode = new Map();
+    for (const [code, v] of bestByCode.entries()) finalBestByCode.set(code, { nota: v.bestStr || null, serumista: v.serumista || null });
+
+    serumistas2025ICache = { mtimeMs: stat.mtimeMs, path: p, byCode: finalByCode, bestByCode: finalBestByCode };
+    return serumistas2025ICache;
+  } catch {
+    serumistas2025ICache = { mtimeMs: 0, path: p, byCode: new Map(), bestByCode: new Map() };
+    return serumistas2025ICache;
+  }
+}
+
+function getSerumistas2025IForHospital(hospital) {
+  const code = hospital && hospital.codigo_renipress_modular ? padIpressCode(hospital.codigo_renipress_modular) : "";
+  if (!code) return { groups: [], best: null };
+  const store = loadSerumistas2025I();
+  const groups = store.byCode.get(code) || [];
+  const best = store.bestByCode.get(code) || null;
+  return { groups, best };
 }
 
 function bumpDbHospitalsRevision() {
@@ -1382,15 +1557,25 @@ async function getHospitalById(id) {
   }
   if (!hospital) throw new HttpError(404, "Hospital no encontrado");
 
-  const encapsInfo = getEncapsInfo2025IForHospital(hospital);
-  const encaps_puntaje_2025_i = encapsInfo ? encapsInfo.nota : null;
-  const encaps_serumista_2025_i = encapsInfo ? encapsInfo.serumista : null;
+  const serumistasInfo = getSerumistas2025IForHospital(hospital);
+  const encapsBest = serumistasInfo.best;
+  const encapsFallback = getEncapsInfo2025IForHospital(hospital);
+  const encaps_puntaje_2025_i = (encapsBest && encapsBest.nota) || (encapsFallback ? encapsFallback.nota : null);
+  const encaps_serumista_2025_i = (encapsBest && encapsBest.serumista) || (encapsFallback ? encapsFallback.serumista : null);
+  const encaps_2025_i = serumistasInfo.groups;
 
-  if (!DB_ENABLED) return { ...hospital, encaps_puntaje_2025_i, encaps_serumista_2025_i };
+  if (!DB_ENABLED) return { ...hospital, encaps_puntaje_2025_i, encaps_serumista_2025_i, encaps_2025_i };
 
   const offers = await serumsOfferRepository.listOffersByHospitalId(hospital.id);
   const resumen = summarizeOffers(offers);
-  return { ...hospital, encaps_puntaje_2025_i, encaps_serumista_2025_i, serums_ofertas: offers, serums_resumen: resumen };
+  return {
+    ...hospital,
+    encaps_puntaje_2025_i,
+    encaps_serumista_2025_i,
+    encaps_2025_i,
+    serums_ofertas: offers,
+    serums_resumen: resumen,
+  };
 }
 
 async function geocodeHospitalById(id, { force = false } = {}) {

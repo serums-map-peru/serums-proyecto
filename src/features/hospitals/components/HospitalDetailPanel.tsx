@@ -634,6 +634,18 @@ export function HospitalDetailPanel({
     ? String((hospital as { encaps_serumista_2025_i?: unknown }).encaps_serumista_2025_i || "").trim()
     : "";
 
+  const encapsGroups =
+    hospital && Array.isArray((hospital as { encaps_2025_i?: unknown }).encaps_2025_i)
+      ? ((hospital as { encaps_2025_i?: unknown }).encaps_2025_i as Array<{
+          periodo: string | null;
+          modalidad: string | null;
+          profesion: string | null;
+          entries: Array<{ serumista: string; nota: string | null }>;
+        }>)
+      : [];
+
+  const hasEncapsGroups = encapsGroups.some((g) => Array.isArray(g.entries) && g.entries.length > 0);
+
   const snapHeights = React.useMemo(() => {
     const vh = viewportHeight || 0;
     const min = Math.round(vh * 0.25);
@@ -1014,11 +1026,33 @@ export function HospitalDetailPanel({
                             ZE: {hospital.ze === "SI" ? "Sí" : "No"}
                           </Tag>
                         </div>
-                        {encapsNote || encapsSerumista ? (
+                        {hasEncapsGroups ? (
+                          <div className="grid gap-2">
+                            <div className="text-xs font-semibold text-[var(--label)]">ENCAPS 2025-1</div>
+                            <div className="grid max-h-[160px] gap-2 overflow-auto pr-1">
+                              {encapsGroups.map((g) => (
+                                <div
+                                  key={`${g.periodo || ""}__${g.modalidad || ""}__${g.profesion || ""}`}
+                                  className="rounded-[var(--radius-card)] bg-black/[0.02] px-3 py-2"
+                                >
+                                  <div className="text-[11px] font-semibold text-[var(--label)]">
+                                    {[g.periodo, g.modalidad, g.profesion].filter(Boolean).join(" · ") || "2025-1"}
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {g.entries.map((e) => (
+                                      <Tag key={`${e.serumista}__${e.nota || ""}`}>
+                                        {toTitleCase(e.serumista)}
+                                        {e.nota ? `: ${e.nota}` : ""}
+                                      </Tag>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : encapsNote || encapsSerumista ? (
                           <div className="flex flex-wrap items-center gap-2">
-                            {encapsNote ? (
-                              <Tag>Puntaje ENCAPS 2025-I: {encapsNote}</Tag>
-                            ) : null}
+                            {encapsNote ? <Tag>Puntaje ENCAPS 2025-I: {encapsNote}</Tag> : null}
                             {encapsNote && encapsNote !== "-" && encapsSerumista ? (
                               <Tag>Serumista 2025-1: {toTitleCase(encapsSerumista)}</Tag>
                             ) : null}

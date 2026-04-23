@@ -19,6 +19,12 @@ export type Hospital = {
   coordenadas_fuente?: string;
   encaps_puntaje_2025_i?: string | null;
   encaps_serumista_2025_i?: string | null;
+  encaps_2025_i?: Array<{
+    periodo: string | null;
+    modalidad: string | null;
+    profesion: string | null;
+    entries: Array<{ serumista: string; nota: string | null }>;
+  }>;
   serums_ofertas?: SerumsOffer[];
   serums_resumen?: SerumsOfferSummary[];
 };

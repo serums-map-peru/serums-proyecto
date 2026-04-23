@@ -5,7 +5,13 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-type EncapsNoteIndex = { mtimeMs: number; byCode: Map<string, { nota: string; serumista: string }> };
+type SerumistasEntry = { serumista: string; nota: string | null };
+type SerumistasGroup = { periodo: string | null; modalidad: string | null; profesion: string | null; entries: SerumistasEntry[] };
+type EncapsNoteIndex = {
+  mtimeMs: number;
+  byCode: Map<string, { nota: string | null; serumista: string | null }>;
+  groupsByCode: Map<string, SerumistasGroup[]>;
+};
 let encapsCache: EncapsNoteIndex | null = null;
 
 function dbPath() {
@@ -13,7 +19,7 @@ function dbPath() {
 }
 
 function encapsCsvPath() {
-  return path.join(process.cwd(), "backend", "src", "data", "serums_offers", "Notas-Serums-2025-1.csv");
+  return path.join(process.cwd(), "backend", "src", "data", "serums_offers", "serumistas-2025-1.csv");
 }
 
 function openDb() {
@@ -127,6 +133,40 @@ function mustGetIndex(headerIndex: Map<string, number>, keys: string[]) {
   return null;
 }
 
+function normalizeTextKey(value: unknown) {
+  return cleanString(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizePeriodKey(value: unknown) {
+  const raw = cleanString(value);
+  if (!raw) return "";
+  const m = raw.match(/(\d{4})\s*[-/._]?\s*(I{1,3}|IV|V|VI|1|2|3)/i);
+  if (!m) return raw;
+  const year = m[1];
+  const token = String(m[2] || "").toUpperCase();
+  const term = token === "1" || token === "I" ? "I" : token === "2" || token === "II" ? "II" : token === "3" || token === "III" ? "III" : token;
+  return `${year}-${term}`;
+}
+
+function normalizeModalidadKey(value: unknown) {
+  const k = normalizeTextKey(value);
+  if (!k) return "";
+  if (k.includes("remuner")) return "remunerado";
+  if (k.includes("equival")) return "equivalente";
+  return k;
+}
+
+function normalizeProfesionKey(value: unknown) {
+  const k = normalizeTextKey(value);
+  if (!k) return "";
+  return k.toUpperCase().replace(/\s+/g, " ").trim();
+}
+
 function loadEncapsNotes() {
   const p = encapsCsvPath();
   try {
@@ -137,58 +177,99 @@ function loadEncapsNotes() {
     const rows = parseDelimited(raw, ";");
     const headerRowIndex = findHeaderRowIndex(rows);
     if (headerRowIndex < 0) {
-      encapsCache = { mtimeMs: stat.mtimeMs, byCode: new Map() };
+      encapsCache = { mtimeMs: stat.mtimeMs, byCode: new Map(), groupsByCode: new Map() };
       return encapsCache;
     }
 
     const headerRow = (rows[headerRowIndex] || []).map((c) => cleanString(c));
     const headerIndex = buildHeaderIndex(headerRow);
-    const idxCodigo = mustGetIndex(headerIndex, ["codigorenipress", "codigorenipressmodular", "renipress", "codigo"]);
-    const idxNota = mustGetIndex(headerIndex, ["nota"]);
-    const idxSerumista = mustGetIndex(headerIndex, [
-      "apellidosynombres",
-      "apellidosynombre",
-      "apellidosnombres",
-      "nombresyapellidos",
-      "nombres",
-      "nombre",
-      "postulante",
-      "serumista",
-    ]);
+    const idxCodigo = mustGetIndex(headerIndex, ["codigorenipress", "codigorenipressmodular", "renipress", "codigo", "codigo_renipress"]);
+    const idxProfesion = mustGetIndex(headerIndex, ["profesion", "profesiones"]);
+    const idxModalidad = mustGetIndex(headerIndex, ["modalidad"]);
+    const idxSerumista = mustGetIndex(headerIndex, ["serumista", "apellidosynombres", "apellidosnombres", "nombresyapellidos", "postulante", "nombre"]);
+    const idxNota = mustGetIndex(headerIndex, ["nota", "puntaje", "puntajeencaps"]);
+    const idxPeriodo = mustGetIndex(headerIndex, ["periodo", "periodoacademico"]);
 
-    const byCode = new Map<string, { bestStr: string; bestNum: number | null; serumista: string }>();
+    const groupsByCode = new Map<
+      string,
+      Map<
+        string,
+        { periodo: string | null; modalidad: string | null; profesion: string | null; entries: SerumistasEntry[]; seen: Set<string> }
+      >
+    >();
+    const bestByCode = new Map<string, { bestStr: string; bestNum: number | null; serumista: string }>();
+
     for (let i = headerRowIndex + 1; i < rows.length; i++) {
       const row = rows[i] || [];
       const codigo = idxCodigo != null && idxCodigo < row.length ? padIpressCode(row[idxCodigo]) : "";
       if (!codigo) continue;
-      const notaRaw = idxNota != null && idxNota < row.length ? cleanString(row[idxNota]) : "";
-      if (!notaRaw) continue;
+
+      const profesionRaw = idxProfesion != null && idxProfesion < row.length ? cleanString(row[idxProfesion]) : "";
+      const modalidadRaw = idxModalidad != null && idxModalidad < row.length ? cleanString(row[idxModalidad]) : "";
       const serumista = idxSerumista != null && idxSerumista < row.length ? cleanString(row[idxSerumista]) : "";
+      const notaRaw = idxNota != null && idxNota < row.length ? cleanString(row[idxNota]) : "";
+      const periodoRaw = idxPeriodo != null && idxPeriodo < row.length ? cleanString(row[idxPeriodo]) : "";
+      if (!serumista && !notaRaw) continue;
+
+      const periodoKey = normalizePeriodKey(periodoRaw);
+      const modalidadKey = normalizeModalidadKey(modalidadRaw);
+      const profesionKey = normalizeProfesionKey(profesionRaw);
+      const groupKey = `${periodoKey}::${modalidadKey}::${profesionKey}`;
+
+      const byKey = groupsByCode.get(codigo) ?? new Map();
+      if (!groupsByCode.has(codigo)) groupsByCode.set(codigo, byKey);
+      const group =
+        byKey.get(groupKey) ??
+        {
+          periodo: periodoRaw || periodoKey || null,
+          modalidad: modalidadRaw || modalidadKey || null,
+          profesion: profesionRaw || profesionKey || null,
+          entries: [],
+          seen: new Set<string>(),
+        };
+      if (!byKey.has(groupKey)) byKey.set(groupKey, group);
+
+      const entryKey = `${normalizeTextKey(serumista)}::${notaRaw}`;
+      if (!group.seen.has(entryKey)) {
+        group.seen.add(entryKey);
+        group.entries.push({ serumista, nota: notaRaw || null });
+      }
+
       const normalized = notaRaw.replace(",", ".");
       const n = Number.parseFloat(normalized);
       const noteNum = Number.isFinite(n) ? n : null;
-      const prev = byCode.get(codigo);
-      if (!prev) {
-        byCode.set(codigo, { bestStr: notaRaw, bestNum: noteNum, serumista });
-        continue;
-      }
-      if (noteNum != null && (prev.bestNum == null || noteNum > prev.bestNum)) {
-        prev.bestNum = noteNum;
-        prev.bestStr = notaRaw;
-        prev.serumista = serumista;
-      } else if (prev.bestNum == null && noteNum == null && !prev.bestStr) {
-        prev.bestStr = notaRaw;
-        prev.serumista = serumista;
+      const prevBest = bestByCode.get(codigo);
+      if (!prevBest) bestByCode.set(codigo, { bestStr: notaRaw, bestNum: noteNum, serumista });
+      else if (noteNum != null && (prevBest.bestNum == null || noteNum > prevBest.bestNum)) {
+        prevBest.bestNum = noteNum;
+        prevBest.bestStr = notaRaw;
+        prevBest.serumista = serumista;
       }
     }
 
-    const final = new Map<string, { nota: string; serumista: string }>();
-    for (const [code, v] of byCode.entries()) final.set(code, { nota: v.bestStr, serumista: v.serumista });
+    const groupsFinal = new Map<string, SerumistasGroup[]>();
+    for (const [code, byKey] of groupsByCode.entries()) {
+      const list: SerumistasGroup[] = Array.from(byKey.values()).map((g) => {
+        const entries = g.entries.slice().sort((a, b) => String(a.serumista || "").localeCompare(String(b.serumista || ""), "es-PE"));
+        return { periodo: g.periodo, modalidad: g.modalidad, profesion: g.profesion, entries };
+      });
+      list.sort((a, b) => {
+        const p = String(b.periodo || "").localeCompare(String(a.periodo || ""));
+        if (p !== 0) return p;
+        const m = String(a.modalidad || "").localeCompare(String(b.modalidad || ""));
+        if (m !== 0) return m;
+        return String(a.profesion || "").localeCompare(String(b.profesion || ""));
+      });
+      groupsFinal.set(code, list);
+    }
 
-    encapsCache = { mtimeMs: stat.mtimeMs, byCode: final };
+    const byCode = new Map<string, { nota: string | null; serumista: string | null }>();
+    for (const [code, v] of bestByCode.entries()) byCode.set(code, { nota: v.bestStr || null, serumista: v.serumista || null });
+
+    encapsCache = { mtimeMs: stat.mtimeMs, byCode, groupsByCode: groupsFinal };
     return encapsCache;
   } catch {
-    encapsCache = { mtimeMs: 0, byCode: new Map() };
+    encapsCache = { mtimeMs: 0, byCode: new Map(), groupsByCode: new Map() };
     return encapsCache;
   }
 }
@@ -277,7 +358,10 @@ export async function GET(
 
     const profesiones = safeJsonArray(row.profesiones_json);
     const imagenes = safeJsonArray(row.imagenes_json);
-    const encapsInfo = getEncapsInfoForHospitalCode(String(row.codigo_renipress_modular || row.id || ""));
+    const encapsStore = loadEncapsNotes();
+    const encapsCode = padIpressCode(String(row.codigo_renipress_modular || row.id || ""));
+    const encapsInfo = encapsCode ? encapsStore.byCode.get(encapsCode) || null : null;
+    const encapsGroups = encapsCode ? encapsStore.groupsByCode.get(encapsCode) || [] : [];
 
     const base = {
       id: String(row.id || ""),
@@ -300,6 +384,7 @@ export async function GET(
       coordenadas_fuente: row.coordenadas_fuente != null ? String(row.coordenadas_fuente) : undefined,
       encaps_puntaje_2025_i: encapsInfo?.nota || null,
       encaps_serumista_2025_i: encapsInfo?.serumista || null,
+      encaps_2025_i: encapsGroups,
     } as Record<string, unknown>;
 
     if (!tableExists(db, "serums_offers")) {
