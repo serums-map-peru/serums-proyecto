@@ -942,6 +942,43 @@ export default function HomePage() {
     return w || "Búsqueda externa temporalmente limitada. Reintenta en unos segundos.";
   }, []);
 
+  const hospitalSearchResults = React.useMemo(() => {
+    const query = searchValue.trim();
+    if (query.length < 2) return [];
+    const normQuery = normalizeText(query);
+    if (!normQuery) return [];
+
+    const tokens = normQuery.split(" ").filter(Boolean);
+    if (tokens.length === 0) return [];
+
+    const scored: Array<{ h: HospitalMapItem; score: number }> = [];
+    for (const h of filteredHospitals) {
+      const haystack = normalizeText(
+        `${h.nombre_establecimiento} ${h.codigo_renipress_modular} ${h.id} ${h.distrito} ${h.provincia} ${h.departamento}`,
+      );
+      if (!tokens.every((t) => haystack.includes(t))) continue;
+
+      let score = 0;
+      const code = normalizeText(h.codigo_renipress_modular || "");
+      const id = normalizeText(h.id || "");
+      const name = normalizeText(h.nombre_establecimiento || "");
+
+      if (code && (code.startsWith(normQuery) || code === normQuery)) score += 120;
+      if (id && (id.startsWith(normQuery) || id === normQuery)) score += 110;
+      if (name && name.startsWith(tokens[0])) score += 40;
+      score += Math.max(0, 16 - Math.min(16, haystack.indexOf(tokens[0]) >= 0 ? haystack.indexOf(tokens[0]) : 16));
+
+      scored.push({ h, score });
+    }
+
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.h.nombre_establecimiento.localeCompare(b.h.nombre_establecimiento);
+    });
+
+    return scored.slice(0, 8).map((s) => s.h);
+  }, [filteredHospitals, searchValue]);
+
   React.useEffect(() => {
     const query = searchValue.trim();
     if (query.length < 3) {
@@ -998,43 +1035,6 @@ export default function HomePage() {
       controller.abort();
     };
   }, [apiBase, hospitalSearchResults.length, searchNonce, searchValue, toSearchWarningUi]);
-
-  const hospitalSearchResults = React.useMemo(() => {
-    const query = searchValue.trim();
-    if (query.length < 2) return [];
-    const normQuery = normalizeText(query);
-    if (!normQuery) return [];
-
-    const tokens = normQuery.split(" ").filter(Boolean);
-    if (tokens.length === 0) return [];
-
-    const scored: Array<{ h: HospitalMapItem; score: number }> = [];
-    for (const h of filteredHospitals) {
-      const haystack = normalizeText(
-        `${h.nombre_establecimiento} ${h.codigo_renipress_modular} ${h.id} ${h.distrito} ${h.provincia} ${h.departamento}`,
-      );
-      if (!tokens.every((t) => haystack.includes(t))) continue;
-
-      let score = 0;
-      const code = normalizeText(h.codigo_renipress_modular || "");
-      const id = normalizeText(h.id || "");
-      const name = normalizeText(h.nombre_establecimiento || "");
-
-      if (code && (code.startsWith(normQuery) || code === normQuery)) score += 120;
-      if (id && (id.startsWith(normQuery) || id === normQuery)) score += 110;
-      if (name && name.startsWith(tokens[0])) score += 40;
-      score += Math.max(0, 16 - Math.min(16, haystack.indexOf(tokens[0]) >= 0 ? haystack.indexOf(tokens[0]) : 16));
-
-      scored.push({ h, score });
-    }
-
-    scored.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      return a.h.nombre_establecimiento.localeCompare(b.h.nombre_establecimiento);
-    });
-
-    return scored.slice(0, 8).map((s) => s.h);
-  }, [filteredHospitals, searchValue]);
 
   const handleSelectSearchResult = React.useCallback((item: NominatimResult) => {
     setSearchValue(item.display_name);
