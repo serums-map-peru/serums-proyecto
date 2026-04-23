@@ -933,6 +933,15 @@ export default function HomePage() {
     }
   }, [filteredHospitals, selectedHospitalId, setHospitalQuery]);
 
+  const toSearchWarningUi = React.useCallback((warning: string) => {
+    const w = String(warning || "").trim();
+    const lower = w.toLowerCase();
+    if (lower.includes("nominatim") || lower.includes("limitando solicitudes")) {
+      return "Búsqueda externa temporalmente limitada. Reintenta en unos segundos.";
+    }
+    return w || "Búsqueda externa temporalmente limitada. Reintenta en unos segundos.";
+  }, []);
+
   React.useEffect(() => {
     const query = searchValue.trim();
     if (query.length < 3) {
@@ -969,7 +978,7 @@ export default function HomePage() {
         .then(({ results, warning }) => {
           setSearchResults(Array.isArray(results) ? results : []);
           setSearchLoading(false);
-          if (warning && !results.length) setSearchError(warning);
+          if (warning && !results.length && hospitalSearchResults.length === 0) setSearchError(toSearchWarningUi(warning));
         })
         .catch((e) => {
           if (e && e.name === "AbortError") {
@@ -988,7 +997,7 @@ export default function HomePage() {
       clearTimeout(t);
       controller.abort();
     };
-  }, [apiBase, searchNonce, searchValue]);
+  }, [apiBase, hospitalSearchResults.length, searchNonce, searchValue, toSearchWarningUi]);
 
   const hospitalSearchResults = React.useMemo(() => {
     const query = searchValue.trim();
