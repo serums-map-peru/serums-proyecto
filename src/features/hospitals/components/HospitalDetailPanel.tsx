@@ -602,12 +602,32 @@ export function HospitalDetailPanel({
       ? hospital.profesiones.join(" · ")
       : hospital.profesion || "—"
     : "—";
-  const plazasTotal =
-    hospital && hospital.serums_resumen && hospital.serums_resumen.length > 0
-      ? hospital.serums_resumen.reduce((acc, r) => acc + (Number.isFinite(r.plazas_total) ? r.plazas_total : 0), 0)
-      : null;
+  const parsePeriodoKey = React.useCallback((raw: unknown) => {
+    const s = String(raw || "").trim();
+    if (!s) return null;
+    const m = s.match(/(\d{4})\s*[-/ ]?\s*(i{1,3}|1|2|3)/i);
+    if (!m) return null;
+    const year = Number(m[1]);
+    const t = String(m[2] || "").toUpperCase();
+    const term = t === "I" || t === "1" ? 1 : t === "II" || t === "2" ? 2 : t === "III" || t === "3" ? 3 : 0;
+    if (!Number.isFinite(year) || year < 1900 || year > 2100 || term < 1) return null;
+    return { year, term };
+  }, []);
 
-  const plazasByModalidad = React.useMemo(() => {
+  const targetPeriodoKey = React.useMemo(() => {
+    const fromLabel = parsePeriodoKey(serumsPeriodoLabel);
+    if (fromLabel) return fromLabel;
+    const rows = hospital?.serums_resumen || [];
+    let best: { year: number; term: number } | null = null;
+    for (const r of rows) {
+      const k = parsePeriodoKey(r.periodo);
+      if (!k) continue;
+      if (!best || k.year > best.year || (k.year === best.year && k.term > best.term)) best = k;
+    }
+    return best;
+  }, [hospital?.serums_resumen, parsePeriodoKey, serumsPeriodoLabel]);
+
+  const plazasForTargetPeriodo = React.useMemo(() => {
     const rows = hospital?.serums_resumen || [];
     const norm = (v: string) =>
       String(v || "")
@@ -615,16 +635,36 @@ export function HospitalDetailPanel({
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .trim();
+    if (!targetPeriodoKey) return { total: null as number | null, byModalidad: { remunerado: 0, equivalente: 0 } };
+    let total = 0;
     let remunerado = 0;
     let equivalente = 0;
+    let any = false;
     for (const r of rows) {
-      const total = Number.isFinite(r.plazas_total) ? r.plazas_total : 0;
+      const k = parsePeriodoKey(r.periodo);
+      if (!k || k.year !== targetPeriodoKey.year || k.term !== targetPeriodoKey.term) continue;
+      any = true;
+      const n = Number.isFinite(r.plazas_total) ? r.plazas_total : 0;
+      total += n;
       const mod = norm(r.modalidad);
-      if (mod.includes("remuner")) remunerado += total;
-      else if (mod.includes("equival")) equivalente += total;
+      if (mod.includes("remuner")) remunerado += n;
+      else if (mod.includes("equival")) equivalente += n;
     }
-    return { remunerado, equivalente };
-  }, [hospital?.serums_resumen]);
+    return { total: any ? total : null, byModalidad: { remunerado, equivalente } };
+  }, [hospital?.serums_resumen, parsePeriodoKey, targetPeriodoKey]);
+
+  const plazas2025I = React.useMemo(() => {
+    const rows = hospital?.serums_resumen || [];
+    let total = 0;
+    let any = false;
+    for (const r of rows) {
+      const k = parsePeriodoKey(r.periodo);
+      if (!k || k.year !== 2025 || k.term !== 1) continue;
+      any = true;
+      total += Number.isFinite(r.plazas_total) ? r.plazas_total : 0;
+    }
+    return any ? total : null;
+  }, [hospital?.serums_resumen, parsePeriodoKey]);
 
   const encapsNote = hospital && typeof (hospital as { encaps_puntaje_2025_i?: unknown }).encaps_puntaje_2025_i === "string"
     ? String((hospital as { encaps_puntaje_2025_i?: unknown }).encaps_puntaje_2025_i || "").trim()
@@ -659,15 +699,19 @@ export function HospitalDetailPanel({
   const sheetHeight = sheetHeightPx ? `${sheetHeightPx}px` : sheet === "collapsed" ? "25vh" : sheet === "full" ? "100vh" : "50vh";
 
   const plazasSummary = React.useMemo(() => {
-    if (plazasTotal == null) return "—";
+    if (plazasForTargetPeriodo.total == null) return "—";
     const parts: string[] = [];
-    parts.push(`${plazasTotal} total`);
-    if (plazasByModalidad.remunerado || plazasByModalidad.equivalente) {
-      parts.push(`${plazasByModalidad.remunerado} remuneradas`);
-      parts.push(`${plazasByModalidad.equivalente} equivalentes`);
+    parts.push(`${plazasForTargetPeriodo.total} total`);
+    if (plazasForTargetPeriodo.byModalidad.remunerado || plazasForTargetPeriodo.byModalidad.equivalente) {
+      parts.push(`${plazasForTargetPeriodo.byModalidad.remunerado} remuneradas`);
+      parts.push(`${plazasForTargetPeriodo.byModalidad.equivalente} equivalentes`);
     }
     return parts.join(" · ");
-  }, [plazasByModalidad.equivalente, plazasByModalidad.remunerado, plazasTotal]);
+  }, [
+    plazasForTargetPeriodo.byModalidad.equivalente,
+    plazasForTargetPeriodo.byModalidad.remunerado,
+    plazasForTargetPeriodo.total,
+  ]);
 
   return (
     <div
@@ -1141,11 +1185,12 @@ export function HospitalDetailPanel({
                           </button>
                           <div
                             className="overflow-hidden rounded-[var(--radius-card)] bg-black/[0.02] transition-[max-height,opacity] duration-300 ease-out"
-                            style={{ maxHeight: technicalOpen ? 220 : 0, opacity: technicalOpen ? 1 : 0 }}
+                            style={{ maxHeight: technicalOpen ? 280 : 0, opacity: technicalOpen ? 1 : 0 }}
                           >
                             <div className="grid gap-3 px-4 py-3">
                               <InfoRow label="Código RENIPRESS modular" value={hospital.codigo_renipress_modular || "—"} />
                               <InfoRow label="Coordenadas" value={`${hospital.lat.toFixed(6)}, ${hospital.lng.toFixed(6)}`} />
+                              <InfoRow label="Plazas SERUMS 2025-1" value={plazas2025I == null ? "—" : `${plazas2025I} total`} />
                               {canCorrectLocation ? (
                                 <Button
                                   variant="secondary"
