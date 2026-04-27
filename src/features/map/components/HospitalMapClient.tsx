@@ -66,6 +66,18 @@ function institucionGroupColor(institucion: string) {
   return "#EF4444";
 }
 
+const HOSPITAL_MARKER_ICON: Record<ReturnType<typeof institucionGroup>, string> = {
+  essalud: "/Essalud.png",
+  minsa: "/MINSA.png",
+  ffaa: "/FF.AA.png",
+  otros: "/Otros.png",
+};
+
+function resolveHospitalMarkerIconUrl(institucion: string) {
+  const g = institucionGroup(institucion);
+  return HOSPITAL_MARKER_ICON[g];
+}
+
 function categoriaNumber(categoria: string) {
   const m = /^I-(\d)$/.exec((categoria || "").trim().toUpperCase());
   return m ? m[1] : "";
@@ -144,12 +156,12 @@ function createMedicalPinDivIcon({
   selected: boolean;
   showLabel: boolean;
 }) {
-  const fill = institucionGroupColor(institucion);
   const safeLabel = escapeHtml(label || "");
 
   const height = Math.round(size * 1.35);
   const shadow = selected ? "0 6px 18px rgba(0,0,0,0.18)" : "0 4px 16px rgba(0,0,0,0.14)";
   const stroke = selected ? "rgba(255,255,255,0.98)" : "rgba(255,255,255,0.92)";
+  const fill = institucionGroupColor(institucion);
 
   const iconSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${height}" viewBox="0 0 24 32">
@@ -164,10 +176,23 @@ function createMedicalPinDivIcon({
     </svg>
   `;
 
+  const iconUrl = resolveHospitalMarkerIconUrl(institucion);
+  const iconImg = `
+    <img
+      src="${iconUrl}"
+      alt=""
+      width="${size}"
+      height="${height}"
+      style="display:block;width:${size}px;height:${height}px;"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='block';"
+    />
+  `;
+
   const html = `
     <div class="serums-marker-bounce" style="display:grid;gap:6px;place-items:center;transform-origin:50% 100%;">
       <div style="position:relative;width:${size}px;height:${height}px;filter:drop-shadow(${shadow});">
-        ${iconSvg}
+        ${iconImg}
+        <div style="display:none">${iconSvg}</div>
       </div>
       ${
         showLabel
