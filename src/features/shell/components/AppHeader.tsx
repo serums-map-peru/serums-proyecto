@@ -222,7 +222,7 @@ export function AppHeader({
           <button
             type="button"
             className="flex shrink-0 items-center rounded-xl px-2 py-2 text-left transition-colors hover:bg-black/[0.04]"
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/map")}
             aria-label="Volver al mapa"
             title="Volver al mapa"
           >

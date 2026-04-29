@@ -46,23 +46,23 @@ export function DashboardTeaser() {
             <div className="lg:col-span-2">
               <div className="inline-flex items-center gap-2 rounded-full glass-dark px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-white/80">
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                Plataforma · mapa en vivo
+                Actualizado al 2026-1
               </div>
 
               <h2 className="mt-5 font-display text-4xl font-extrabold leading-[1.05] tracking-tight md:text-5xl">
-                Todo el Perú, <span className="text-gradient-brand">en un mapa.</span>
+                Todas las plazas, <span className="text-gradient-brand">en un mapa.</span>
               </h2>
 
               <p className="mt-4 text-base font-medium leading-relaxed text-white/70">
-                Un vistazo claro a clusters geoespaciales y plazas SERUMS: compara regiones, detecta patrones y aterriza tu shortlist más rápido.
+                Un vistazo claro a clusters geoespaciales y plazas SERUMS: compara regiones, toma decisiones y aterriza tu shortlist más rápido.
               </p>
 
               <div className="mt-8 grid gap-3 sm:grid-cols-2">
                 {[
-                  { icon: Layers, title: "Clusters geoespaciales" },
+                  { icon: Layers, title: "+20mil plazas" },
                   { icon: Filter, title: "Filtros inteligentes" },
-                  { icon: TrendingUp, title: "Señales en vivo" },
-                  { icon: MapPin, title: "Rutas óptimas" },
+                  { icon: TrendingUp, title: "17 carreras" },
+                  { icon: MapPin, title: "+5mil establecimientos" },
                 ].map((it) => {
                   const Icon = it.icon;
                   return (
@@ -78,7 +78,7 @@ export function DashboardTeaser() {
 
               <div className="mt-8">
                 <Link
-                  href="/"
+                  href="/map"
                   className="group inline-flex items-center gap-2 rounded-full bg-gradient-brand px-6 py-3.5 text-sm font-semibold text-white shadow-glow transition-transform hover:scale-[1.03]"
                 >
                   Ir al mapa
@@ -95,8 +95,7 @@ export function DashboardTeaser() {
                     <span className="h-2.5 w-2.5 rounded-full bg-yellow-400/70" />
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
                   </div>
-                  <div className="truncate font-mono text-xs font-semibold text-white/60">localisa.app/mapa</div>
-                  <div className="text-xs font-semibold text-[var(--primary-glow)]">v2.6</div>
+                  <div className="truncate font-mono text-xs font-semibold text-white/60">www.localisa.pe</div>
                 </div>
 
                 <div className="relative mt-4 aspect-[4/3] overflow-hidden rounded-xl bg-[oklch(0.18_0.05_280)]">
@@ -189,16 +188,8 @@ export function DashboardTeaser() {
                       </div>
                     </div>
                   </div>
-
-                  <div className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-lg glass-dark px-2.5 py-1.5 font-mono text-[10px] font-semibold text-white/80">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                    LIVE · 8,247 plazas
-                  </div>
                   <div className="absolute right-3 top-3 rounded-lg glass-dark px-2.5 py-1.5 font-mono text-[10px] font-semibold text-white/80">
                     25 regiones
-                  </div>
-                  <div className="absolute bottom-3 left-3 rounded-lg glass-dark px-2.5 py-1.5 text-[10px] font-semibold text-white/80">
-                    <span className="font-semibold text-[var(--primary-glow)]">Cusco</span> <span className="text-white/60">·</span> 14 coincidencias
                   </div>
                   <div className="absolute bottom-3 right-3 flex gap-2">
                     <button

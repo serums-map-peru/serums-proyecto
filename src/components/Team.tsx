@@ -78,7 +78,7 @@ const team: TeamMember[] = [
     socials: [
       { icon: Linkedin, href: "https://www.linkedin.com/in/andre-lapeyre/", label: "LinkedIn" },
       { icon: ResearchGate, href: "https://www.researchgate.net/profile/Andre-Lapeyre-Rivera-2", label: "ResearchGate" },
-      { icon: Orcid, href: "#", label: "ORCID" },
+      { icon: Orcid, href: "https://orcid.org/0000-0001-8384-6711", label: "ORCID" },
     ],
   },
 ];

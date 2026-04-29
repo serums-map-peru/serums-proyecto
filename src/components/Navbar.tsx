@@ -78,7 +78,7 @@ export function Navbar({
 
           <div className="flex items-center gap-2 pr-2">
             <a
-              href="/"
+              href="/map"
               className="hidden items-center gap-2 rounded-full bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition-transform hover:scale-[1.03] md:inline-flex"
             >
               <Image src="/Lisa%20personaje.png" alt="" width={18} height={18} className="h-[18px] w-auto object-contain" />
@@ -109,7 +109,7 @@ export function Navbar({
                 </a>
               ))}
               <a
-                href="/"
+                href="/map"
                 className="mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-brand px-5 py-3 text-sm font-semibold text-white shadow-glow"
                 onClick={() => setOpen(false)}
               >

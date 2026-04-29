@@ -1,5 +1,3 @@
-import { Sparkles } from "lucide-react";
-
 type FooterLink = { label: string; href: string };
 
 export function Footer({
@@ -11,27 +9,34 @@ export function Footer({
   productName: string;
   links: FooterLink[];
 }) {
-  const half = Math.ceil(productName.length / 2);
-  const first = productName.slice(0, half);
-  const second = productName.slice(half);
-
   return (
     <footer className="border-t border-border bg-secondary">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-12 sm:px-6 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-brand shadow-glow text-white">
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
+        <a href="#top" className="flex items-center gap-3">
+          <div className="flex h-10 items-center" style={{ gap: "8px" }}>
+            <img
+              src="/Lisa%20personaje.png"
+              alt="LISA"
+              width={64}
+              height={64}
+              className="h-9 w-auto origin-left scale-125 object-contain"
+              loading="lazy"
+            />
+            <img
+              src="/lisafinal.png"
+              alt={productName}
+              width={220}
+              height={64}
+              className="h-9 w-auto object-contain"
+              loading="lazy"
+            />
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-bold text-foreground">
-              <span className="font-display">{first}</span>
-              <span className="font-display text-gradient-brand">{second}</span>
-            </div>
             <div className="mt-1 text-xs font-semibold text-muted-foreground">
               © {year} {productName}
             </div>
           </div>
-        </div>
+        </a>
 
         <div className="flex flex-wrap items-center gap-2">
           {links.map((l) => (
@@ -48,4 +53,3 @@ export function Footer({
     </footer>
   );
 }
-
