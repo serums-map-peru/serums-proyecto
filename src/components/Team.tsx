@@ -23,6 +23,20 @@ const Instagram = createLucideIcon("Instagram", [
   ["line", { x1: "17.5", y1: "6.5", x2: "17.51", y2: "6.5", key: "ig3" }],
 ]);
 
+const ResearchGate = createLucideIcon("ResearchGate", [
+  ["circle", { cx: "12", cy: "12", r: "9", key: "rg0" }],
+  ["path", { d: "M9 16V8h3.4a2.3 2.3 0 0 1 0 4.6H9", key: "rg1" }],
+  ["path", { d: "M12.2 12.6 15 16", key: "rg2" }],
+  ["path", { d: "M14.6 12.7a2.8 2.8 0 1 0 0 5.6c.8 0 1.5-.2 2.1-.6", key: "rg3" }],
+]);
+
+const Orcid = createLucideIcon("Orcid", [
+  ["circle", { cx: "12", cy: "12", r: "9", key: "or0" }],
+  ["path", { d: "M8.6 9.8v5.8", key: "or1" }],
+  ["path", { d: "M8.6 8.1h.01", key: "or2" }],
+  ["path", { d: "M11.2 9.8h2.1a3 3 0 0 1 0 6h-2.1z", key: "or3" }],
+]);
+
 type TeamMember = {
   name: string;
   role: string;
@@ -38,6 +52,7 @@ const team: TeamMember[] = [
     role: "Médico de la UDEP",
     initials: "NJ",
     hue: "from-primary to-accent",
+    photoSrc: "/NairJavier.png",
     socials: [
       
     ],
@@ -47,10 +62,11 @@ const team: TeamMember[] = [
     role: "Dev de LISA",
     initials: "MJ",
     hue: "from-accent to-[var(--primary-glow)]",
+    photoSrc: "/Ing. Mathias Javier.jpeg",
     socials: [
-      { icon: Linkedin, href: "#", label: "LinkedIn" },
-      { icon: Instagram, href: "#", label: "Instagram" },
-      { icon: Github, href: "#", label: "GitHub" },
+      { icon: Linkedin, href: "https://www.linkedin.com/in/mathias-javier-murillo-744508350", label: "LinkedIn" },
+      { icon: Instagram, href: "https://www.instagram.com/mjavierm_?igsh=MWx6ZGMyZnpyanF1Zg%3D%3D&utm_source=qr", label: "Instagram" },
+      { icon: Github, href: "https://github.com/K1ngHulk", label: "GitHub" },
     ],
   },
   {
@@ -58,9 +74,11 @@ const team: TeamMember[] = [
     role: "Médico de la UNMSM",
     initials: "AL",
     hue: "from-[var(--primary-glow)] to-primary",
+    photoSrc: "/Dr.André Lapeyre.jpeg",
     socials: [
-      { icon: Linkedin, href: "#", label: "LinkedIn" },
-      { icon: Instagram, href: "#", label: "Instagram" },
+      { icon: Linkedin, href: "https://www.linkedin.com/in/andre-lapeyre/", label: "LinkedIn" },
+      { icon: ResearchGate, href: "https://www.researchgate.net/profile/Andre-Lapeyre-Rivera-2", label: "ResearchGate" },
+      { icon: Orcid, href: "#", label: "ORCID" },
     ],
   },
 ];
