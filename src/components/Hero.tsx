@@ -101,8 +101,8 @@ export function Hero({
                 <div className="mt-4 overflow-hidden rounded-[1.5rem] border border-border bg-white">
                   <div className="relative aspect-square">
                     <div className="absolute left-4 top-4 z-10 inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-2 text-xs font-semibold text-foreground/70 backdrop-blur">
-                      <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/10 text-primary">
-                        <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/10">
+                        <Image src="/Lisa%20personaje.png" alt="" width={18} height={18} className="h-4 w-auto object-contain" />
                       </span>
                       Busca tu plaza ideal…
                     </div>

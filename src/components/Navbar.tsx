@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { MapPin, Menu, Sparkles, X } from "lucide-react";
+import Image from "next/image";
+import { Menu, X } from "lucide-react";
 
 type NavLink = { label: string; href: string };
 
@@ -33,10 +34,6 @@ export function Navbar({
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const half = Math.ceil(productName.length / 2);
-  const first = productName.slice(0, half);
-  const second = productName.slice(half);
-
   return (
     <header className="fixed inset-x-0 top-0 z-50">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -47,12 +44,23 @@ export function Navbar({
           ].join(" ")}
         >
           <a href="#top" className="flex items-center gap-3 rounded-2xl px-3 py-2">
-            <div className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-brand shadow-glow text-white">
-              <Sparkles className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div className="text-base font-bold tracking-tight text-foreground">
-              <span className="font-display">{first}</span>
-              <span className="font-display text-gradient-brand">{second}</span>
+            <div className="flex h-10 items-center" style={{ gap: "8px" }}>
+              <Image
+                src="/Lisa%20personaje.png"
+                alt="LISA"
+                width={64}
+                height={64}
+                priority
+                className="h-9 w-auto origin-left scale-125 object-contain"
+              />
+              <Image
+                src="/lisafinal.png"
+                alt={productName}
+                width={220}
+                height={64}
+                priority
+                className="h-9 w-auto object-contain"
+              />
             </div>
           </a>
 
@@ -73,7 +81,7 @@ export function Navbar({
               href="/"
               className="hidden items-center gap-2 rounded-full bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition-transform hover:scale-[1.03] md:inline-flex"
             >
-              <MapPin className="h-4 w-4" aria-hidden="true" />
+              <Image src="/Lisa%20personaje.png" alt="" width={18} height={18} className="h-[18px] w-auto object-contain" />
               {primaryCta}
             </a>
             <button
@@ -105,7 +113,7 @@ export function Navbar({
                 className="mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-brand px-5 py-3 text-sm font-semibold text-white shadow-glow"
                 onClick={() => setOpen(false)}
               >
-                <MapPin className="h-4 w-4" aria-hidden="true" />
+                <Image src="/Lisa%20personaje.png" alt="" width={18} height={18} className="h-[18px] w-auto object-contain" />
                 {primaryCta}
               </a>
             </div>

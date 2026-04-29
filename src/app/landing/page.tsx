@@ -11,7 +11,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background text-foreground">
       <Navbar
         productName="LISA"
-        primaryCta="Acceso Early Bird"
+        primaryCta="Ir al mapa"
         links={[
           { label: "Funciones", href: "#features" },
           { label: "Plataforma", href: "#dashboard" },
@@ -28,7 +28,7 @@ export default function LandingPage() {
           secondaryCta={{ label: "Ver cómo funciona", href: "#features" }}
           stat1="+20,093 plazas indexadas"
           stat2="25 regiones del Perú"
-          heroImageSrc="/lisafinal.png"
+          heroImageSrc="/Lisa personaje.png"
           chip1="Plazas SERUMS"
           chip2="Ir al mapa"
           metrics={[
@@ -61,19 +61,7 @@ export default function LandingPage() {
           }}
         />
         <DashboardTeaser />
-        <Team
-          eyebrow="El Equipo"
-          title="Hecho por personas"
-          titleHighlight="obsesionadas"
-          titleEnd="con claridad"
-          members={[
-            { name: "Mathías", role: "Producto · SERUMS", photoSrc: "/lisafinal.png", social: { type: "linkedin", href: "#" } },
-            { name: "Andrea", role: "UX/UI", photoSrc: "/lisafinal.png", social: { type: "instagram", href: "#" } },
-            { name: "Carlos", role: "Frontend", photoSrc: "/lisafinal.png", social: { type: "github", href: "#" } },
-            { name: "Valeria", role: "Datos", photoSrc: "/lisafinal.png", social: { type: "twitter", href: "#" } },
-            { name: "Luis", role: "Backend", photoSrc: "/lisafinal.png", social: { type: "github", href: "#" } },
-          ]}
-        />
+        <Team />
         <EarlyBird
           title="Acceso Early Bird"
           subtitle="Recibe acceso temprano y novedades del periodo. Solo UI por ahora: te avisamos cuando esté listo."
