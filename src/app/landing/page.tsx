@@ -30,7 +30,6 @@ export default function LandingPage() {
           stat2="25 regiones del Perú"
           heroImageSrc="/Lisa personaje.png"
           chip1="Plazas SERUMS"
-          chip2="Ir al mapa"
           metrics={[
             { value: "2026-1", label: "Actualizado" },
             { value: "17", label: "Carreras" },
@@ -43,12 +42,12 @@ export default function LandingPage() {
           titleHighlight="decidir mejor"
           description="Diseñado para comparar plazas de manera visual: buscar, filtrar, revisar detalle y volver al mapa sin perder contexto."
           feature1={{
-            title: "Búsqueda inteligente",
+            title: "Filtra por intereses",
             tags: ["Distrito", "Provincia", "Establecimiento"],
             query: "“Hospital regional…”",
           }}
           feature2={{
-            title: "Mapa por institución",
+            title: "Mapa interactivo",
             chip: "Señales visuales",
           }}
           feature3={{

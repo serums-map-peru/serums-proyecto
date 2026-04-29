@@ -14,7 +14,6 @@ export function Hero({
   stat2,
   heroImageSrc,
   chip1,
-  chip2,
   metrics,
 }: {
   productName: string;
@@ -27,7 +26,6 @@ export function Hero({
   stat2: string;
   heroImageSrc: string;
   chip1: string;
-  chip2: string;
   metrics: [Metric, Metric, Metric];
 }) {
   return (
@@ -100,13 +98,6 @@ export function Hero({
 
                 <div className="mt-4 overflow-hidden rounded-[1.5rem] border border-border bg-white">
                   <div className="relative aspect-square">
-                    <div className="absolute left-4 top-4 z-10 inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-2 text-xs font-semibold text-foreground/70 backdrop-blur">
-                      <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/10">
-                        <Image src="/Lisa%20personaje.png" alt="" width={18} height={18} className="h-4 w-auto object-contain" />
-                      </span>
-                      Busca tu plaza ideal…
-                    </div>
-
                     <div className="absolute inset-0 grid place-items-center">
                       <div className="relative h-[76%] w-[76%] animate-float">
                         <Image
@@ -133,9 +124,6 @@ export function Hero({
 
                 <div className="pointer-events-none absolute left-6 top-20 inline-flex items-center gap-2 rounded-full glass-dark px-3 py-2 text-xs font-semibold text-white">
                   {chip1}
-                </div>
-                <div className="pointer-events-none absolute bottom-24 right-6 inline-flex items-center gap-2 rounded-full glass-dark px-3 py-2 text-xs font-semibold text-white">
-                  {chip2}
                 </div>
               </div>
             </div>
