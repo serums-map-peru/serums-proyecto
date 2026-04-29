@@ -64,7 +64,6 @@ function buildHospitalsWhere({
   categorias,
   zaf,
   ze,
-  bono,
   serums_periodo,
   serums_modalidad,
   omit,
@@ -78,7 +77,6 @@ function buildHospitalsWhere({
   categorias: string[];
   zaf: string | null;
   ze: string | null;
-  bono: string | null;
   serums_periodo: string | null;
   serums_modalidad: string | null;
   omit: "departamento" | "institucion" | "grado_dificultad" | "categoria" | null;
@@ -112,11 +110,6 @@ function buildHospitalsWhere({
   if (omit !== "categoria") addLowerIn("h.categoria", categorias);
   addLowerEq("h.zaf", zaf);
   addLowerEq("h.ze", ze);
-  if (bono && bono.trim()) {
-    where.push(
-      "(h.presupuesto IS NOT NULL AND LENGTH(TRIM(h.presupuesto)) > 0 AND LOWER(TRIM(h.presupuesto)) != 'sin presupuesto')",
-    );
-  }
 
   const requiresOfferFilter = !!serums_periodo || !!serums_modalidad;
   const offerFilter = requiresOfferFilter
@@ -204,7 +197,6 @@ export async function GET(request: Request) {
   const categorias = cleanArray(sp.getAll("categoria"));
   const zaf = cleanString(sp.get("zaf"));
   const ze = cleanString(sp.get("ze"));
-  const bono = cleanString(sp.get("bono"));
   const serums_periodo = cleanString(sp.get("serums_periodo"));
   const serums_modalidad = cleanString(sp.get("serums_modalidad"));
 
@@ -228,7 +220,6 @@ export async function GET(request: Request) {
         categorias,
         zaf,
         ze,
-        bono,
         serums_periodo,
         serums_modalidad,
         omit: key,

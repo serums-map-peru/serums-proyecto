@@ -45,7 +45,6 @@ function areHospitalFiltersEquivalent(a: HospitalFilters, b: HospitalFilters) {
     sameStringSet(a.categoria, b.categoria) &&
     sameScalar(a.zaf, b.zaf) &&
     sameScalar(a.ze, b.ze) &&
-    sameScalar(a.bono, b.bono) &&
     sameScalar(a.serums_periodo, b.serums_periodo) &&
     sameScalar(a.serums_modalidad, b.serums_modalidad) &&
     sameScalar(a.airport_hours_max ?? null, b.airport_hours_max ?? null)
@@ -553,15 +552,8 @@ export function FiltersBar({
             >
               <div className="grid gap-3 px-2 pb-3">
                 <div className="grid gap-1">
-                  <div className="px-2 pt-1 text-xs font-medium text-[var(--label)]">Filtro</div>
+                  <div className="px-2 pt-1 text-xs font-medium text-[var(--label)]">Bono</div>
                   {[
-                    {
-                      key: "bono" as const,
-                      label: "BONO",
-                      checked: draftFilters.bono === "SI",
-                      onToggle: () =>
-                        setDraftFilters((prev) => ({ ...prev, bono: prev.bono === "SI" ? null : "SI" })),
-                    },
                     {
                       key: "zaf" as const,
                       label: "ZAF",

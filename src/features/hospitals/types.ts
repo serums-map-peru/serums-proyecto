@@ -72,7 +72,6 @@ export type HospitalFilters = {
   categoria: string[];
   zaf: string | null;
   ze: string | null;
-  bono: string | null;
   serums_periodo: string | null;
   serums_modalidad: string | null;
   airport_hours_max?: number | null;

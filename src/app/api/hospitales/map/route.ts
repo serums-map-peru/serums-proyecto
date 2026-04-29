@@ -248,7 +248,6 @@ export async function GET(request: Request) {
   const categorias = cleanArray(sp.getAll("categoria"));
   const zaf = cleanString(sp.get("zaf"));
   const ze = cleanString(sp.get("ze"));
-  const bono = cleanString(sp.get("bono"));
   const serums_periodo = cleanString(sp.get("serums_periodo"));
   const serums_modalidad = cleanString(sp.get("serums_modalidad"));
   const airportHoursMax = parseNumberParam(sp.get("airport_hours_max"));
@@ -288,11 +287,6 @@ export async function GET(request: Request) {
     addLowerIn("h.categoria", categorias);
     addLowerEq("h.zaf", zaf);
     addLowerEq("h.ze", ze);
-    if (bono && bono.trim()) {
-      where.push(
-        "(h.presupuesto IS NOT NULL AND LENGTH(TRIM(h.presupuesto)) > 0 AND LOWER(TRIM(h.presupuesto)) != 'sin presupuesto')",
-      );
-    }
 
     const requiresOfferFilter = !!serums_periodo || !!serums_modalidad;
     const needsOfferFilter = !!profesion || requiresOfferFilter;
