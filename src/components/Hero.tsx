@@ -84,10 +84,10 @@ export function Hero({
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(700px_circle_at_45%_0%,oklch(0.46_0.21_295/0.20),transparent_62%),radial-gradient(700px_circle_at_75%_80%,oklch(0.6_0.18_245/0.18),transparent_60%)]" />
 
               <div className="relative p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-3 text-xs font-semibold text-foreground/60">
-                  <div className="inline-flex items-center gap-2">
+                <div className="flex min-w-0 items-center justify-between gap-3 text-xs font-semibold text-foreground/60">
+                  <div className="inline-flex min-w-0 items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    Información actualizada · {metrics[0].value}
+                    <span className="min-w-0 truncate">Información actualizada · {metrics[0].value}</span>
                   </div>
                   <div className="flex gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-foreground/15" />
@@ -113,11 +113,16 @@ export function Hero({
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-3 gap-3">
+                <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
                   {metrics.map((m) => (
-                    <div key={m.label} className="rounded-2xl border border-border bg-white/70 px-4 py-3 text-center backdrop-blur">
-                      <div className="font-display text-lg font-extrabold text-gradient-brand sm:text-xl">{m.value}</div>
-                      <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground/60">{m.label}</div>
+                    <div
+                      key={m.label}
+                      className="min-w-0 rounded-2xl border border-border bg-white/70 px-2.5 py-2.5 text-center backdrop-blur sm:px-4 sm:py-3"
+                    >
+                      <div className="font-display text-base font-extrabold text-gradient-brand sm:text-xl">{m.value}</div>
+                      <div className="mt-0.5 break-words text-[9px] font-bold uppercase leading-tight tracking-wide text-foreground/60 sm:text-[10px] sm:tracking-wider">
+                        {m.label}
+                      </div>
                     </div>
                   ))}
                 </div>

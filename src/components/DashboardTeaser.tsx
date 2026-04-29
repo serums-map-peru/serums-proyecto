@@ -27,10 +27,10 @@ const clusters = [
 ] as const;
 
 const sizeMap = {
-  xs: "h-7 w-7 text-[10px]",
-  sm: "h-9 w-9 text-[11px]",
-  md: "h-11 w-11 text-xs",
-  lg: "h-14 w-14 text-sm",
+  xs: "h-6 w-6 text-[9px] sm:h-7 sm:w-7 sm:text-[10px]",
+  sm: "h-7 w-7 text-[10px] sm:h-9 sm:w-9 sm:text-[11px]",
+  md: "h-9 w-9 text-[11px] sm:h-11 sm:w-11 sm:text-xs",
+  lg: "h-11 w-11 text-xs sm:h-14 sm:w-14 sm:text-sm",
 } as const;
 
 export function DashboardTeaser() {
