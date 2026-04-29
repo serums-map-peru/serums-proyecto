@@ -27,16 +27,26 @@ type TeamMember = {
   name: string;
   role: string;
   initials: string;
+  photoSrc?: string;
   hue: string;
   socials: Array<{ icon: LucideIcon; href: string; label: string }>;
 };
 
 const team: TeamMember[] = [
   {
-    name: "Mateo Vargas",
-    role: "Founder & AI Lead",
-    initials: "MV",
+    name: "Dr. Nair Javier Murillo",
+    role: "Médico de la UDEP",
+    initials: "NJ",
     hue: "from-primary to-accent",
+    socials: [
+      
+    ],
+  },
+  {
+    name: "Mathias Javier Murillo",
+    role: "Dev de LISA",
+    initials: "MJ",
+    hue: "from-accent to-[var(--primary-glow)]",
     socials: [
       { icon: Linkedin, href: "#", label: "LinkedIn" },
       { icon: Instagram, href: "#", label: "Instagram" },
@@ -44,19 +54,9 @@ const team: TeamMember[] = [
     ],
   },
   {
-    name: "Lucía Rojas",
-    role: "Product Designer",
-    initials: "LR",
-    hue: "from-accent to-[var(--primary-glow)]",
-    socials: [
-      { icon: Linkedin, href: "#", label: "LinkedIn" },
-      { icon: Instagram, href: "#", label: "Instagram" },
-    ],
-  },
-  {
-    name: "Diego Quispe",
-    role: "Geo Data Engineer",
-    initials: "DQ",
+    name: "Dr. André Lapeyre Rivera",
+    role: "Médico de la UNMSM",
+    initials: "AL",
     hue: "from-[var(--primary-glow)] to-primary",
     socials: [
       { icon: Linkedin, href: "#", label: "LinkedIn" },
@@ -72,10 +72,10 @@ export function Team() {
         <div className="mx-auto max-w-3xl text-center">
           <span className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Créditos</span>
           <h2 className="mt-4 font-display text-4xl font-bold tracking-tight md:text-5xl">
-            El equipo detrás <span className="text-gradient-brand">de Lisa.</span>
+            El equipo detrás <span className="text-gradient-brand">de LISA</span>
           </h2>
           <p className="mt-4 text-muted-foreground">
-            Médicos, ingenieros y diseñadores construyendo el futuro del SERUMS en Perú.
+            Médicos e ingenieros se juntaron para mejorar el futuro del SERUMS en Perú.
           </p>
         </div>
 
@@ -95,9 +95,18 @@ export function Team() {
                   ].join(" ")}
                 />
                 <div className={["relative h-36 w-36 rounded-full bg-gradient-to-br p-[3px] shadow-glow", m.hue].join(" ")}>
-                  <div className="flex h-full w-full items-center justify-center rounded-full bg-card font-display text-4xl font-bold text-gradient-brand">
-                    {m.initials}
-                  </div>
+                  {m.photoSrc ? (
+                    <img
+                      src={m.photoSrc}
+                      alt={m.name}
+                      className="h-full w-full rounded-full bg-card object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center rounded-full bg-card font-display text-4xl font-bold text-gradient-brand">
+                      {m.initials}
+                    </div>
+                  )}
                 </div>
               </div>
 
