@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Menu, Sparkles, X } from "lucide-react";
+import { MapPin, Menu, Sparkles, X } from "lucide-react";
 
 type NavLink = { label: string; href: string };
 
@@ -42,7 +42,7 @@ export function Navbar({
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div
           className={[
-            "mt-3 flex items-center justify-between rounded-3xl border border-transparent transition-all",
+            "mt-3 flex items-center justify-between gap-4 rounded-3xl border border-transparent transition-all",
             scrolled ? "glass shadow-soft border-white/20 py-2" : "bg-transparent py-3",
           ].join(" ")}
         >
@@ -56,12 +56,12 @@ export function Navbar({
             </div>
           </a>
 
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden flex-1 items-center justify-center gap-1 md:flex">
             {links.map((l) => (
               <a
                 key={l.href}
                 href={l.href}
-                className="rounded-full px-4 py-2 text-sm font-semibold text-foreground/80 transition-colors hover:bg-secondary"
+                className="rounded-full px-4 py-2 text-sm font-semibold text-foreground/75 transition-colors hover:bg-secondary"
               >
                 {l.label}
               </a>
@@ -70,10 +70,10 @@ export function Navbar({
 
           <div className="flex items-center gap-2 pr-2">
             <a
-              href="#early"
+              href="/"
               className="hidden items-center gap-2 rounded-full bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition-transform hover:scale-[1.03] md:inline-flex"
             >
-              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              <MapPin className="h-4 w-4" aria-hidden="true" />
               {primaryCta}
             </a>
             <button
@@ -101,11 +101,11 @@ export function Navbar({
                 </a>
               ))}
               <a
-                href="#early"
+                href="/"
                 className="mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-brand px-5 py-3 text-sm font-semibold text-white shadow-glow"
                 onClick={() => setOpen(false)}
               >
-                <Sparkles className="h-4 w-4" aria-hidden="true" />
+                <MapPin className="h-4 w-4" aria-hidden="true" />
                 {primaryCta}
               </a>
             </div>
@@ -115,4 +115,3 @@ export function Navbar({
     </header>
   );
 }
-

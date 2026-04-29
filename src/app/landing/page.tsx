@@ -22,19 +22,19 @@ export default function LandingPage() {
         <Hero
           productName="LISA"
           badge="Plataforma SERUMS · Perú 2026"
-          titleLines={["Encuentra tu plaza SERUMS", "con claridad", "y en mapa."]}
-          description="Explora establecimientos en un mapa interactivo, filtra por institución y categoría, y arma tu shortlist en minutos."
-          primaryCta={{ label: "Acceso Early Bird", href: "#early" }}
-          secondaryCta={{ label: "Ver funciones", href: "#features" }}
-          stat1="Actualizado 2026-I"
-          stat2="Miles de establecimientos"
+          titleLines={["El futuro de las", "plazas\nSERUMS", "está aquí."]}
+          description="LocalLisa es una herramienta que busca facilitar a los serumistas del Perú a tomar una decisión más eficiente y de manera más visual."
+          primaryCta={{ label: "Ir al mapa", href: "/" }}
+          secondaryCta={{ label: "Ver cómo funciona", href: "#features" }}
+          stat1="+20,093 plazas indexadas"
+          stat2="25 regiones del Perú"
           heroImageSrc="/lisafinal.png"
-          chip1="Decisiones más rápidas"
-          chip2="Mapa + filtros"
+          chip1="Plazas SERUMS"
+          chip2="Ir al mapa"
           metrics={[
-            { value: "4", label: "Instituciones" },
-            { value: "I-1 → I-4", label: "Categorías" },
-            { value: "2026-I", label: "Periodo" },
+            { value: "2026-1", label: "Actualizado" },
+            { value: "17", label: "Carreras" },
+            { value: "+5mil", label: "Establecimientos" },
           ]}
         />
         <Features
@@ -60,18 +60,7 @@ export default function LandingPage() {
             ],
           }}
         />
-        <DashboardTeaser
-          eyebrow="Plataforma"
-          title="Un dashboard"
-          titleHighlight="premium"
-          description="Un vistazo claro: región, establecimiento, categoría y vacantes. Visual, consistente y rápido."
-          rows={[
-            { region: "Lima", establecimiento: "Hospital X", categoria: "I-3", vacantes: "12", badge: "Activo" },
-            { region: "Arequipa", establecimiento: "Centro de Salud Y", categoria: "I-2", vacantes: "7", badge: "Nuevo" },
-            { region: "Cusco", establecimiento: "Hospital Z", categoria: "I-4", vacantes: "3", badge: "Top" },
-            { region: "Piura", establecimiento: "Puesto A", categoria: "I-1", vacantes: "9", badge: "Activo" },
-          ]}
-        />
+        <DashboardTeaser />
         <Team
           eyebrow="El Equipo"
           title="Hecho por personas"
