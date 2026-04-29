@@ -13,6 +13,7 @@ export function createInitialHospitalFilters(): HospitalFilters {
     categoria: [],
     zaf: null,
     ze: null,
+    bono: null,
     serums_periodo: "2026-I",
     serums_modalidad: null,
     airport_hours_max: null,
@@ -46,6 +47,7 @@ function buildHospitalQuery(filters: HospitalFilters) {
   }
   if (filters.zaf && filters.zaf.trim()) params.set("zaf", filters.zaf.trim());
   if (filters.ze && filters.ze.trim()) params.set("ze", filters.ze.trim());
+  if (filters.bono && filters.bono.trim()) params.set("bono", filters.bono.trim());
   if (filters.serums_periodo && filters.serums_periodo.trim()) params.set("serums_periodo", filters.serums_periodo.trim());
   if (filters.serums_modalidad && filters.serums_modalidad.trim()) params.set("serums_modalidad", filters.serums_modalidad.trim());
   if (filters.airport_hours_max != null) params.set("airport_hours_max", String(filters.airport_hours_max));

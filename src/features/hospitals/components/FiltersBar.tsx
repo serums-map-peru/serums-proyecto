@@ -45,6 +45,7 @@ function areHospitalFiltersEquivalent(a: HospitalFilters, b: HospitalFilters) {
     sameStringSet(a.categoria, b.categoria) &&
     sameScalar(a.zaf, b.zaf) &&
     sameScalar(a.ze, b.ze) &&
+    sameScalar(a.bono, b.bono) &&
     sameScalar(a.serums_periodo, b.serums_periodo) &&
     sameScalar(a.serums_modalidad, b.serums_modalidad) &&
     sameScalar(a.airport_hours_max ?? null, b.airport_hours_max ?? null)
@@ -201,16 +202,6 @@ function normalizeDepartamentoKey(value: string) {
     .trim();
 }
 
-function preferredDepartamentoLabel(key: string) {
-  const k = normalizeDepartamentoKey(key);
-  if (k === "ANCASH") return "Áncash";
-  if (k === "APURIMAC") return "Apurímac";
-  if (k === "HUANUCO") return "Huánuco";
-  if (k === "JUNIN") return "Junín";
-  if (k === "SAN MARTIN") return "San Martín";
-  return "";
-}
-
 function institutionOrderRank(institucion: string) {
   const v = normalizeInstitution(institucion);
   if (v.includes("essalud")) return 0;
@@ -311,9 +302,7 @@ export function FiltersBar({
         existing.enabled = existing.enabled || enabled;
         continue;
       }
-      const preferred = preferredDepartamentoLabel(key);
-      const label = preferred || toTitleCase(raw);
-      groups.set(key, { key, label, variants: [raw], enabled });
+      groups.set(key, { key, label: key, variants: [raw], enabled });
     }
 
     const out = Array.from(groups.values());
@@ -322,9 +311,9 @@ export function FiltersBar({
   }, [deptValues, options?.departamentos?.enabled]);
 
   const filteredDeptValues = React.useMemo(() => {
-    const q = departmentSearch.trim().toLowerCase();
+    const q = normalizeDepartamentoKey(departmentSearch);
     if (!q) return deptGroups;
-    return deptGroups.filter((d) => d.label.toLowerCase().includes(q));
+    return deptGroups.filter((d) => d.label.includes(q));
   }, [departmentSearch, deptGroups]);
 
   const [selectedDepartamentos, setSelectedDepartamentos] = React.useState<string[]>(
@@ -528,11 +517,6 @@ export function FiltersBar({
                               const set = new Set(prev);
                               for (const v of g.variants) set.add(v);
                               set.add(g.key);
-                              const pref = preferredDepartamentoLabel(g.key);
-                              if (pref) {
-                                set.add(pref);
-                                set.add(pref.toUpperCase());
-                              }
                               next = Array.from(set);
                             }
                             selectedDepartamentosRef.current = next;
@@ -568,6 +552,33 @@ export function FiltersBar({
               style={{ maxHeight: filtersOpen ? 920 : 0, opacity: filtersOpen ? 1 : 0 }}
             >
               <div className="grid gap-3 px-2 pb-3">
+                <div className="grid gap-1">
+                  <div className="px-2 pt-1 text-xs font-medium text-[var(--label)]">Filtro</div>
+                  {[
+                    {
+                      key: "bono" as const,
+                      label: "BONO",
+                      checked: draftFilters.bono === "SI",
+                      onToggle: () =>
+                        setDraftFilters((prev) => ({ ...prev, bono: prev.bono === "SI" ? null : "SI" })),
+                    },
+                    {
+                      key: "zaf" as const,
+                      label: "ZAF",
+                      checked: draftFilters.zaf === "SI",
+                      onToggle: () => setDraftFilters((prev) => ({ ...prev, zaf: prev.zaf === "SI" ? null : "SI" })),
+                    },
+                    {
+                      key: "ze" as const,
+                      label: "ZE",
+                      checked: draftFilters.ze === "SI",
+                      onToggle: () => setDraftFilters((prev) => ({ ...prev, ze: prev.ze === "SI" ? null : "SI" })),
+                    },
+                  ].map((f) => (
+                    <AppleCheckbox key={f.key} label={f.label} checked={f.checked} onChange={f.onToggle} />
+                  ))}
+                </div>
+
                 <div className="grid gap-1">
                   <div className="px-2 pt-1 text-xs font-medium text-[var(--label)]">Institución</div>
                   <div
