@@ -67,7 +67,7 @@ function institucionGroupColor(institucion: string) {
 }
 
 const HOSPITAL_MARKER_ICON: Record<ReturnType<typeof institucionGroup>, string> = {
-  essalud: "/Essalud.png",
+  essalud: "/EsSalud.png",
   minsa: "/MINSA.png",
   ffaa: "/FF.AA.png",
   otros: "/Otros.png",
