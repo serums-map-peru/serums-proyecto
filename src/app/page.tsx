@@ -61,6 +61,26 @@ export default function LandingPage() {
         />
         <DashboardTeaser />
         <Team />
+        <section className="px-4 pb-16 sm:px-6">
+          <div className="mx-auto max-w-6xl rounded-3xl border border-border bg-white/80 p-6 shadow-soft backdrop-blur sm:p-8">
+            <div className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Sobre los datos</div>
+            <h2 className="mt-2 font-display text-2xl font-extrabold text-foreground sm:text-3xl">
+              Transparencia sobre fuentes y precisión
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm font-medium leading-relaxed text-muted-foreground sm:text-base">
+              Conoce de dónde provienen los datos, por qué algunas ubicaciones pueden variar y cómo reportar mejoras para
+              seguir afinando la herramienta.
+            </p>
+            <div className="mt-5">
+              <a
+                href="/sobre-los-datos"
+                className="inline-flex items-center rounded-full bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-black/90"
+              >
+                Leer sobre los datos
+              </a>
+            </div>
+          </div>
+        </section>
       </main>
       <Footer
         year={new Date().getFullYear()}
@@ -69,6 +89,7 @@ export default function LandingPage() {
           { label: "Funciones", href: "#features" },
           { label: "Plataforma", href: "#dashboard" },
           { label: "Equipo", href: "#team" },
+          { label: "Sobre los datos", href: "/sobre-los-datos" },
         ]}
       />
     </div>

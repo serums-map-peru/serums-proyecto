@@ -347,6 +347,7 @@ export default function HomePage() {
   const [authMode, setAuthMode] = React.useState<"login" | "register">("login");
   const [authNonce, setAuthNonce] = React.useState(0);
   const [authRole, setAuthRoleState] = React.useState<"admin" | "user" | null>(null);
+  const [locationBannerOpen, setLocationBannerOpen] = React.useState(true);
 
   const [hasHydrated, setHasHydrated] = React.useState(false);
   React.useEffect(() => setHasHydrated(true), []);
@@ -2129,24 +2130,55 @@ export default function HomePage() {
             </div>
           </div>
         ) : (
-          <>
-            <HospitalMap
-              hospitals={hospitalsForMapAfterLegend}
-              selectedHospitalId={selectedHospitalId}
-              loading={loading}
-              userLocation={userLocation}
-              route={routeForMap}
-              routeLoading={routeLoading || airportLoading}
-              nearby={nearby}
-              nearbyPlaces={nearbyPlacesForMap}
-              hoveredNearbyId={hoveredNearbyId}
-              selectedNearbyId={selectedNearbyId}
-              focusNearbyId={focusNearbyId}
-              nearbyLoading={nearbyLoading}
-              focus={focus}
-              onSelectHospital={handleSelectHospital}
-              serumsPeriodoLabel={filters.serums_periodo}
-            />
+          <div className="flex h-full min-h-0 flex-col bg-slate-50">
+            {locationBannerOpen ? (
+              <div className="border-b border-amber-200 bg-[#FFF3CD] px-3 py-2 sm:px-4">
+                <div className="mx-auto w-full max-w-6xl">
+                  <div className="relative px-8 sm:px-10">
+                    <div className="flex items-center justify-center gap-2 text-center text-xs font-medium text-amber-900 sm:text-sm">
+                      <span className="text-base leading-none text-yellow-500" aria-hidden="true">
+                        ⚠️
+                      </span>
+                      <p className="leading-relaxed">
+                        Las ubicaciones en el mapa son referenciales. Algunos puntos pueden no coincidir con la ubicación
+                        real del establecimiento.{" "}
+                        <a href="/sobre-los-datos" className="font-semibold underline underline-offset-2 hover:text-amber-950">
+                          Más info
+                        </a>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="absolute right-0 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-amber-900/80 hover:bg-amber-200/60 hover:text-amber-950"
+                      onClick={() => setLocationBannerOpen(false)}
+                      aria-label="Cerrar aviso"
+                      title="Cerrar aviso"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="relative flex-1 min-h-0 overflow-hidden">
+              <HospitalMap
+                hospitals={hospitalsForMapAfterLegend}
+                selectedHospitalId={selectedHospitalId}
+                loading={loading}
+                userLocation={userLocation}
+                route={routeForMap}
+                routeLoading={routeLoading || airportLoading}
+                nearby={nearby}
+                nearbyPlaces={nearbyPlacesForMap}
+                hoveredNearbyId={hoveredNearbyId}
+                selectedNearbyId={selectedNearbyId}
+                focusNearbyId={focusNearbyId}
+                nearbyLoading={nearbyLoading}
+                focus={focus}
+                onSelectHospital={handleSelectHospital}
+                serumsPeriodoLabel={filters.serums_periodo}
+              />
 
             <div className="absolute right-3 top-3 z-[1200] hidden sm:block">
               <div className="grid gap-2">
@@ -2264,39 +2296,48 @@ export default function HomePage() {
               </button>
             </div>
 
-            <div
-              className={cn(
-                "absolute inset-0 z-[2500] sm:hidden",
-                sidebarOpen ? "pointer-events-auto" : "pointer-events-none",
-              )}
-              aria-hidden={!sidebarOpen}
-            >
               <div
                 className={cn(
-                  "absolute inset-0 bg-black/20 transition-opacity",
-                  sidebarOpen ? "opacity-100" : "opacity-0",
+                  "absolute inset-0 z-[2500] sm:hidden",
+                  sidebarOpen ? "pointer-events-auto" : "pointer-events-none",
                 )}
-                onClick={() => setSidebarOpen(false)}
-              />
-              <div
-                className={cn(
-                  "absolute left-0 top-0 h-full w-[92%] max-w-[420px] p-3 transition-transform duration-300 ease-out",
-                  sidebarOpen ? "translate-x-0" : "-translate-x-full",
-                )}
+                aria-hidden={!sidebarOpen}
               >
-                <FiltersBar
-                  filters={filters}
-                  setFilters={setFilters}
-                  options={options}
-                  results={hospitalsForMapAfterLegend}
-                  selectedHospitalId={selectedHospitalId}
-                  onSelectHospital={handleSelectHospital}
-                  onCloseMobile={() => setSidebarOpen(false)}
+                <div
+                  className={cn(
+                    "absolute inset-0 bg-black/20 transition-opacity",
+                    sidebarOpen ? "opacity-100" : "opacity-0",
+                  )}
+                  onClick={() => setSidebarOpen(false)}
                 />
+                <div
+                  className={cn(
+                    "absolute left-0 top-0 h-full w-[92%] max-w-[420px] p-3 transition-transform duration-300 ease-out",
+                    sidebarOpen ? "translate-x-0" : "-translate-x-full",
+                  )}
+                >
+                  <FiltersBar
+                    filters={filters}
+                    setFilters={setFilters}
+                    options={options}
+                    results={hospitalsForMapAfterLegend}
+                    selectedHospitalId={selectedHospitalId}
+                    onSelectHospital={handleSelectHospital}
+                    onCloseMobile={() => setSidebarOpen(false)}
+                  />
+                </div>
               </div>
             </div>
 
-          </>
+            <div className="flex h-9 items-center justify-center border-t border-[var(--border)] bg-white px-3">
+              <a
+                href="/sobre-los-datos"
+                className="text-xs font-semibold text-[var(--label)] underline underline-offset-2 hover:text-[var(--title)]"
+              >
+                Sobre los datos
+              </a>
+            </div>
+          </div>
         )}
       </div>
       </div>

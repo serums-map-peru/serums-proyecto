@@ -132,6 +132,14 @@ function mapsUrlForHospital(
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}`;
 }
 
+function hasVerifiedLocationTag(source: string | null | undefined) {
+  const s = String(source || "").toUpperCase().trim();
+  if (!s) return false;
+  if (s === "RENIPRESS") return false;
+  if (s.includes("CENTROID")) return false;
+  return s.includes("OVERRIDE") || s.includes("VERIFIC") || s.includes("COMUNIDAD") || s.includes("REPORTE");
+}
+
 function directionsUrl(origin: { lat: number; lng: number } | null, dest: { lat: number; lng: number } | null) {
   if (!dest) return "";
   if (!Number.isFinite(dest.lat) || !Number.isFinite(dest.lng)) return "";
@@ -597,6 +605,7 @@ export function HospitalDetailPanel({
 
   const fullName = hospital?.nombre_establecimiento ? toTitleCase(hospital.nombre_establecimiento) : "";
   const fullLocation = hospital ? `${hospital.distrito} · ${hospital.provincia} · ${hospital.departamento}` : "";
+  const locationVerified = hasVerifiedLocationTag(hospital?.coordenadas_fuente);
   const profesion = hospital
     ? hospital.profesiones && hospital.profesiones.length > 0
       ? hospital.profesiones.join(" · ")
@@ -1063,6 +1072,9 @@ export function HospitalDetailPanel({
                         <div className="flex flex-wrap items-center gap-2">
                           {hospital.institucion ? <Tag className={institutionTagClass(hospital.institucion)}>{hospital.institucion}</Tag> : null}
                           {hospital.grado_dificultad ? <Tag>{hospital.grado_dificultad}</Tag> : null}
+                          {locationVerified ? (
+                            <Tag className="border-emerald-200/70 bg-emerald-50 text-emerald-800">Ubicación verificada</Tag>
+                          ) : null}
                           <Tag className={hospital.zaf === "SI" ? "border-emerald-200/60 bg-emerald-100 text-emerald-900" : "border-red-200/60 bg-red-100 text-red-900"}>
                             ZAF: {hospital.zaf === "SI" ? "Sí" : "No"}
                           </Tag>
@@ -1103,6 +1115,12 @@ export function HospitalDetailPanel({
                           </div>
                         ) : null}
                         <InfoRow label="Plazas SERUMS disponibles" value={plazasSummary} />
+                        <div className="text-xs font-medium text-[var(--label)]">
+                          ¿Dudas sobre precisión y fuentes?{" "}
+                          <a href="/sobre-los-datos" className="font-semibold underline underline-offset-2 hover:text-[var(--title)]">
+                            Sobre los datos
+                          </a>
+                        </div>
                       </div>
                     </div>
 
