@@ -17,7 +17,14 @@ import {
 } from "@/features/hospitals/types";
 import { HospitalMap } from "@/features/map/components/HospitalMap";
 import { AppHeader } from "@/features/shell/components/AppHeader";
-import { getAuthEmailFromToken, getAuthRole, getAuthToken, setAuthRole as persistAuthRole } from "@/features/auth/token";
+import {
+  clearAuthRole,
+  clearAuthToken,
+  getAuthEmailFromToken,
+  getAuthRole,
+  getAuthToken,
+  setAuthRole as persistAuthRole,
+} from "@/features/auth/token";
 import { AuthModal } from "@/features/auth/components/AuthModal";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/Button";
@@ -437,6 +444,15 @@ export default function HomePage() {
     return fallback;
   }, []);
 
+  const clearInvalidSession = React.useCallback((message = "Sesión expirada. Inicia sesión nuevamente.") => {
+    clearAuthToken();
+    clearAuthRole();
+    setAuthRoleState(null);
+    setFavorites([]);
+    setFavoritesLoading(false);
+    setFavoritesError(message);
+  }, []);
+
   const refreshFavorites = React.useCallback(async () => {
     const token = getAuthToken();
     if (!token) {
@@ -450,7 +466,13 @@ export default function HomePage() {
     try {
       const r = await fetch(`${apiBase}/favoritos`, { headers: { Authorization: `Bearer ${token}` } });
       const body = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(extractApiErrorMessage(body, "No se pudo cargar favoritos."));
+      if (!r.ok) {
+        if (r.status === 401) {
+          clearInvalidSession();
+          return;
+        }
+        throw new Error(extractApiErrorMessage(body, "No se pudo cargar favoritos."));
+      }
       const list =
         body && typeof body === "object" && "favorites" in body && Array.isArray((body as { favorites?: unknown }).favorites)
           ? ((body as { favorites: FavoriteItem[] }).favorites as FavoriteItem[])
@@ -461,7 +483,7 @@ export default function HomePage() {
     } finally {
       setFavoritesLoading(false);
     }
-  }, [apiBase, extractApiErrorMessage]);
+  }, [apiBase, clearInvalidSession, extractApiErrorMessage]);
 
   const extractNotes = React.useCallback((meta: unknown) => {
     if (!meta || typeof meta !== "object") return "";
@@ -739,6 +761,10 @@ export default function HomePage() {
       const r = await fetch(`${apiBase}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
       const body = await r.json().catch(() => null);
       if (!r.ok) {
+        if (r.status === 401) {
+          clearInvalidSession();
+          return;
+        }
         setAuthRoleState(inferRole());
         return;
       }
@@ -752,7 +778,7 @@ export default function HomePage() {
     } catch {
       setAuthRoleState(inferRole());
     }
-  }, [apiBase]);
+  }, [apiBase, clearInvalidSession]);
 
   const addFavorite = React.useCallback(
     async (fav: PendingFavorite) => {
